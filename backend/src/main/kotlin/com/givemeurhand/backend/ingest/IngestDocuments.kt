@@ -1,6 +1,8 @@
 package com.givemeurhand.backend.ingest
 
 import com.givemeurhand.backend.config.AppConfig
+import com.givemeurhand.backend.rag.KNOWLEDGE_CHUNKS_COLLECTION
+import com.mongodb.client.model.Filters
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import kotlinx.coroutines.runBlocking
 import org.bson.Document
@@ -28,8 +30,14 @@ fun main(args: Array<String>) {
     runBlocking {
         val mongoClient = MongoClient.create(config.mongoUri)
         try {
-            val collection = mongoClient.getDatabase(config.mongoDatabase).getCollection<Document>("knowledge_chunks")
+            val collection = mongoClient.getDatabase(config.mongoDatabase).getCollection<Document>(KNOWLEDGE_CHUNKS_COLLECTION)
             var totalInserted = 0
+
+            val fileNames = pdfFiles.map { it.name }
+            val deletedCount = collection.deleteMany(Filters.`in`("sourceDocument", fileNames)).deletedCount
+            if (deletedCount > 0) {
+                println("Se eliminaron $deletedCount chunks previos de estos documentos antes de re-insertar.")
+            }
 
             pdfFiles.forEach { pdfFile ->
                 println("Procesando ${pdfFile.name}...")
@@ -49,7 +57,7 @@ fun main(args: Array<String>) {
                 println("  -> ${records.size} chunks")
             }
 
-            println("Listo. $totalInserted chunks insertados en knowledge_chunks.")
+            println("Listo. $totalInserted chunks insertados en $KNOWLEDGE_CHUNKS_COLLECTION.")
         } finally {
             mongoClient.close()
         }

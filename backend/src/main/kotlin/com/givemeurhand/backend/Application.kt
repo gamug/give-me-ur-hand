@@ -4,6 +4,7 @@ import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
+import com.givemeurhand.backend.rag.KNOWLEDGE_CHUNKS_COLLECTION
 import com.givemeurhand.backend.rag.MongoChunkRepository
 import com.givemeurhand.backend.routes.TECHNICAL_ERROR_MESSAGE
 import com.givemeurhand.backend.routes.ChatResponse
@@ -43,7 +44,7 @@ fun main() {
 
     val mongoClient = MongoClient.create(config.mongoUri)
     val database = mongoClient.getDatabase(config.mongoDatabase)
-    val chunkRepository = MongoChunkRepository(database.getCollection<Document>("knowledge_chunks"))
+    val chunkRepository = MongoChunkRepository(database.getCollection<Document>(KNOWLEDGE_CHUNKS_COLLECTION))
 
     // Task 3 of the "Professional Coordination" plan replaces this line with a
     // Mongo-backed AssignmentService — nothing else in this file changes.
