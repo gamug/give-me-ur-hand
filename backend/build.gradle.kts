@@ -43,6 +43,7 @@ tasks.register<JavaExec>("ingestDocuments") {
     description = "Extrae los PDFs de psicological-first-aid y los carga como chunks en MongoDB"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.givemeurhand.backend.ingest.IngestDocumentsKt")
+    environment(System.getenv())
     if (project.hasProperty("sourceDir")) {
         args = listOf(project.property("sourceDir") as String)
     }

@@ -2,6 +2,9 @@ package com.givemeurhand.backend.ingest
 
 object TextChunker {
     fun chunk(text: String, chunkSize: Int = 600, overlap: Int = 100): List<String> {
+        require(chunkSize > 0 && overlap in 0 until chunkSize) {
+            "chunkSize must be positive and overlap must be less than chunkSize"
+        }
         val normalized = text.replace(Regex("\\s+"), " ").trim()
         if (normalized.isEmpty()) return emptyList()
         if (normalized.length <= chunkSize) return listOf(normalized)
