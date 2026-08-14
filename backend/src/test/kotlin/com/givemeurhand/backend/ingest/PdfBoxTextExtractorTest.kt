@@ -33,9 +33,7 @@ class PdfBoxTextExtractorTest {
                 document.addPage(page)
                 PDPageContentStream(document, page).use { stream ->
                     stream.beginText()
-                    @Suppress("UNCHECKED_CAST")
-                    val helvetica = Standard14Fonts.FontName::class.java.getField("HELVETICA").get(null) as Standard14Fonts.FontName
-                    stream.setFont(PDType1Font(helvetica), 12f)
+                    stream.setFont(PDType1Font(Standard14Fonts.FontName.HELVETICA), 12f)
                     stream.newLineAtOffset(50f, 700f)
                     stream.showText(text)
                     stream.endText()
