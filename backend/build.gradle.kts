@@ -25,6 +25,7 @@ dependencies {
     implementation("org.mindrot:jbcrypt:0.4")
     implementation("com.auth0:java-jwt:4.4.0")
     implementation("ch.qos.logback:logback-classic:1.5.6")
+    implementation("org.apache.pdfbox:pdfbox:3.0.3")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
