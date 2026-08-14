@@ -76,7 +76,10 @@ Entrada: `{ sessionId: string (UUID generado por el cliente), message: string }`
    - `pregunta_normal` sin chunks → respuesta fija: "Tu pregunta no está
      relacionada con el propósito de esta aplicación."
 
-Salida: `{ reply: string, kind: "answer" | "human_help" | "out_of_scope" }`.
+Salida: `{ reply: string, kind: "answer" | "human_help" | "out_of_scope" | "error" }`.
+El valor `"error"` se usa exclusivamente para fallas técnicas (DeepSeek/Mongo
+no responden tras el reintento) y nunca debe confundirse con `"out_of_scope"`
+(ver sección de Manejo de errores).
 
 ## Ingesta de contenido RAG
 
