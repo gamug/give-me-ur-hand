@@ -23,6 +23,9 @@ backend/build/
 android/build/
 android/app/build/
 
+# Local Gradle distribution (large, machine-specific, never commit)
+backend/gradle-*/
+
 # OS
 .DS_Store
 Thumbs.db
