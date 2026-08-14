@@ -4,11 +4,13 @@ package com.givemeurhand.backend.agent
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
+import org.slf4j.LoggerFactory
 
 object ExpandStep {
     private const val SYSTEM_PROMPT = """Genera 3 reformulaciones de la siguiente pregunta, cada una con una perspectiva más amplia que la original (sinónimos, contexto relacionado, ángulos distintos del mismo tema), en español. Responde ÚNICAMENTE con un array JSON de 3 strings, sin texto adicional. Formato: ["reformulación 1", "reformulación 2", "reformulación 3"]"""
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val logger = LoggerFactory.getLogger(ExpandStep::class.java)
 
     suspend fun run(text: String, client: DeepSeekClient): List<String> {
         val raw = client.complete(SYSTEM_PROMPT, text).trim()
@@ -16,6 +18,7 @@ object ExpandStep {
             val parsed = json.decodeFromString<List<String>>(raw)
             parsed.ifEmpty { listOf(text) }
         } catch (e: Exception) {
+            logger.warn("Failed to parse ExpandStep JSON response, falling back to original query", e)
             listOf(text)
         }
     }
