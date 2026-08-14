@@ -38,6 +38,16 @@ application {
     mainClass.set("com.givemeurhand.backend.ApplicationKt")
 }
 
+tasks.register<JavaExec>("ingestDocuments") {
+    group = "application"
+    description = "Extrae los PDFs de psicological-first-aid y los carga como chunks en MongoDB"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.givemeurhand.backend.ingest.IngestDocumentsKt")
+    if (project.hasProperty("sourceDir")) {
+        args = listOf(project.property("sourceDir") as String)
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }
