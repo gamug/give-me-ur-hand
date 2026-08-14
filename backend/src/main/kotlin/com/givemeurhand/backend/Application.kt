@@ -1,5 +1,7 @@
 package com.givemeurhand.backend
 
+import com.givemeurhand.backend.agent.ChatAgent
+import com.givemeurhand.backend.routes.chatRoutes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -10,15 +12,13 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun main() {
-    val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-    embeddedServer(Netty, port = port, module = Application::module).start(wait = true)
+    // Real wiring (DeepSeek/Mongo/config) is added in Task 11.
 }
 
-fun Application.module() {
+fun Application.module(agent: ChatAgent) {
     install(ContentNegotiation) { json() }
     routing {
-        get("/health") {
-            call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
-        }
+        get("/health") { call.respond(HttpStatusCode.OK, mapOf("status" to "ok")) }
+        chatRoutes(agent)
     }
 }
