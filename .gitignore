@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+professionals-seed.json
+
+# IDE
+.idea/
+
+# Gradle / Kotlin / Android
+.gradle/
+build/
+*/build/
+local.properties
+.kotlin/
+captures/
+*.hprof
+*.apk
+*.aab
+
+# Backend build artifacts
+backend/build/
+android/build/
+android/app/build/
+
+# OS
+.DS_Store
+Thumbs.db
