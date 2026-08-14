@@ -23,7 +23,7 @@ class ChatAgent(
         }
 
         val reformulations = ExpandStep.run(clean, deepSeekClient)
-        val chunks = RagSearchStep.search(listOf(clean) + reformulations, chunkRepository)
+        val chunks = RagSearchStep.search((listOf(clean) + reformulations).distinct(), chunkRepository)
 
         if (chunks.isEmpty()) {
             return AgentResult(

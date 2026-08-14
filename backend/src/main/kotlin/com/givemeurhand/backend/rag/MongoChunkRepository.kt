@@ -28,8 +28,11 @@ class MongoChunkRepository(
         id = get("_id").toString(),
         text = getString("text") ?: "",
         sourceDocument = getString("sourceDocument") ?: "",
-        page = getInteger("page", 0),
-        chunkIndex = getInteger("chunkIndex", 0),
+        page = getIntFlexible("page", 0),
+        chunkIndex = getIntFlexible("chunkIndex", 0),
         score = getDouble("score") ?: 0.0
     )
+
+    private fun Document.getIntFlexible(key: String, default: Int): Int =
+        (get(key) as? Number)?.toInt() ?: default
 }
