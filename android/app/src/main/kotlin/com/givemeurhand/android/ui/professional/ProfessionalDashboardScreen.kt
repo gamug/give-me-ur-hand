@@ -1,16 +1,19 @@
 // android/app/src/main/kotlin/com/givemeurhand/android/ui/professional/ProfessionalDashboardScreen.kt
 package com.givemeurhand.android.ui.professional
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -23,7 +26,12 @@ fun ProfessionalDashboardScreen(viewModel: ProfessionalDashboardViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Tus casos asignados", style = MaterialTheme.typography.headlineSmall)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Tus casos asignados", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = { viewModel.refresh() }) {
+                Text("Actualizar")
+            }
+        }
 
         uiState.errorMessage?.let { error ->
             Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp))
