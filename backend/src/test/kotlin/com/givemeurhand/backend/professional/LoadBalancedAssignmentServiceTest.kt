@@ -89,6 +89,7 @@ class LoadBalancedAssignmentServiceTest {
         val throwingProfessionalRepository = object : ProfessionalRepository {
             override suspend fun findActive(): List<Professional> = throw RuntimeException("db unreachable")
             override suspend fun findByUsername(username: String): Professional? = null
+            override suspend fun findById(id: String): Professional? = null
         }
         val assignments = FakeAssignmentRepository()
 
