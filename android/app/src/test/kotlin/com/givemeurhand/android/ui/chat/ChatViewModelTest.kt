@@ -4,10 +4,12 @@ import com.givemeurhand.android.MainDispatcherRule
 import com.givemeurhand.android.data.ChatResponse
 import com.givemeurhand.android.data.FakeChatApiClient
 import com.givemeurhand.android.data.FakeSessionIdProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 
@@ -54,5 +56,21 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, viewModel.uiState.value.messages.size)
+    }
+
+    @Test
+    fun `a CancellationException propagates and does not update the error state`() = runTest {
+        val api = FakeChatApiClient(error = CancellationException("cancelled"))
+        val viewModel = ChatViewModel(api, FakeSessionIdProvider("s1"))
+
+        viewModel.sendMessage("hola")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        // The user message should be in the state (added before the cancellation)
+        assertEquals(1, state.messages.size)
+        assertEquals("hola", state.messages[0].text)
+        // But the error state should NOT be updated
+        assertNull(state.errorMessage)
     }
 }
