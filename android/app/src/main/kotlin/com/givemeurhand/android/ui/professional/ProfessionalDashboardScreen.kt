@@ -22,14 +22,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.givemeurhand.android.data.CaseResponse
 
 @Composable
-fun ProfessionalDashboardScreen(viewModel: ProfessionalDashboardViewModel) {
+fun ProfessionalDashboardScreen(viewModel: ProfessionalDashboardViewModel, onLogout: () -> Unit) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Tus casos asignados", style = MaterialTheme.typography.headlineSmall)
-            TextButton(onClick = { viewModel.refresh() }) {
-                Text("Actualizar")
+            Row {
+                TextButton(onClick = { viewModel.refresh() }) {
+                    Text("Actualizar")
+                }
+                TextButton(onClick = onLogout) {
+                    Text("Cerrar sesión")
+                }
             }
         }
 
