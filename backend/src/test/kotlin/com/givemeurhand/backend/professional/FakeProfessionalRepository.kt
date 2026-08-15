@@ -4,4 +4,6 @@ class FakeProfessionalRepository(private val professionals: List<Professional>) 
     override suspend fun findActive(): List<Professional> = professionals.filter { it.active }
     override suspend fun findByUsername(username: String): Professional? =
         professionals.find { it.username == username }
+    override suspend fun findById(id: String): Professional? =
+        professionals.find { it.id == id }
 }

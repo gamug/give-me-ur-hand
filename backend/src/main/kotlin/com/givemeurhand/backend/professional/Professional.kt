@@ -12,4 +12,5 @@ data class Professional(
 interface ProfessionalRepository {
     suspend fun findActive(): List<Professional>
     suspend fun findByUsername(username: String): Professional?
+    suspend fun findById(id: String): Professional?
 }

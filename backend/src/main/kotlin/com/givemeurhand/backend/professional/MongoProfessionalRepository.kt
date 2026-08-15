@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
+import org.bson.types.ObjectId
 
 const val PROFESSIONALS_COLLECTION = "professionals"
 
@@ -18,6 +19,11 @@ class MongoProfessionalRepository(
 
     override suspend fun findByUsername(username: String): Professional? =
         collection.find(Filters.eq("username", username)).firstOrNull()?.toProfessional()
+
+    override suspend fun findById(id: String): Professional? {
+        val objectId = runCatching { ObjectId(id) }.getOrNull() ?: return null
+        return collection.find(Filters.eq("_id", objectId)).firstOrNull()?.toProfessional()
+    }
 
     private fun Document.toProfessional() = Professional(
         id = get("_id").toString(),
