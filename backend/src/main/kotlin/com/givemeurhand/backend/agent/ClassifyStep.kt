@@ -3,12 +3,13 @@ package com.givemeurhand.backend.agent
 
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 
-enum class Intent { HUMAN_HELP_EXPLICIT, CRISIS_RISK, NORMAL_QUESTION }
+enum class Intent { HUMAN_HELP_EXPLICIT, CRISIS_RISK, GREETING, NORMAL_QUESTION }
 
 object ClassifyStep {
-    private const val SYSTEM_PROMPT = """Clasifica el siguiente mensaje de una persona afectada por un terremoto en EXACTAMENTE una de estas tres etiquetas. Responde solo con la etiqueta, nada más:
+    private const val SYSTEM_PROMPT = """Clasifica el siguiente mensaje de una persona afectada por un terremoto en EXACTAMENTE una de estas cuatro etiquetas. Responde solo con la etiqueta, nada más:
 AYUDA_HUMANA - la persona pide explícitamente hablar con una persona, un profesional o ayuda humana directa.
 RIESGO_CRISIS - hay señales de posible daño a sí mismo, a otros, o peligro de vida inmediato.
+SALUDO_CORTESIA - el mensaje es solo un saludo, agradecimiento, despedida u otra fórmula de cortesía social, sin una pregunta o necesidad concreta (ej: "hola", "buenos días", "gracias", "chao").
 PREGUNTA_NORMAL - cualquier otro caso."""
 
     suspend fun run(text: String, client: DeepSeekClient): Intent {
@@ -16,6 +17,7 @@ PREGUNTA_NORMAL - cualquier otro caso."""
         return when {
             raw.contains("AYUDA_HUMANA") -> Intent.HUMAN_HELP_EXPLICIT
             raw.contains("RIESGO_CRISIS") -> Intent.CRISIS_RISK
+            raw.contains("SALUDO_CORTESIA") -> Intent.GREETING
             raw.contains("PREGUNTA_NORMAL") -> Intent.NORMAL_QUESTION
             // Respuesta ambigua o no reconocida: por seguridad se trata como
             // posible crisis, para no dejar sin atención humana un caso real.

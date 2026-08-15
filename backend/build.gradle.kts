@@ -49,6 +49,17 @@ tasks.register<JavaExec>("ingestDocuments") {
     }
 }
 
+tasks.register<JavaExec>("seedProfessionals") {
+    group = "application"
+    description = "Crea cuentas de profesionales a partir de professionals-seed.json"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.givemeurhand.backend.professional.SeedProfessionalsKt")
+    environment(System.getenv())
+    if (project.hasProperty("seedFile")) {
+        args = listOf(project.property("seedFile") as String)
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }
