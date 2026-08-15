@@ -30,6 +30,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation as ServerContentNegotiation
 import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.bson.Document
@@ -86,7 +87,11 @@ fun Application.module(agent: ChatAgent, professionalDeps: ProfessionalRouteDeps
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             logger.error("Unhandled exception while processing request", cause)
-            call.respond(HttpStatusCode.BadRequest, ChatResponse(TECHNICAL_ERROR_MESSAGE, "error"))
+            if (call.request.path().startsWith("/professionals")) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Solicitud inválida"))
+            } else {
+                call.respond(HttpStatusCode.BadRequest, ChatResponse(TECHNICAL_ERROR_MESSAGE, "error"))
+            }
         }
     }
     routing {

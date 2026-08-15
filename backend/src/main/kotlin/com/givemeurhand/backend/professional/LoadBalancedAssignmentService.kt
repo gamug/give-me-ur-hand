@@ -2,6 +2,7 @@ package com.givemeurhand.backend.professional
 
 import com.givemeurhand.backend.assignment.AssignmentService
 import kotlinx.coroutines.CancellationException
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
 
@@ -12,6 +13,8 @@ class LoadBalancedAssignmentService(
     private val maxAgeHours: Long,
     private val clock: () -> Instant = { Instant.now() }
 ) : AssignmentService {
+
+    private val logger = LoggerFactory.getLogger(LoadBalancedAssignmentService::class.java)
 
     private data class Candidate(val professional: Professional, val load: Int, val lastAssignedAt: Instant?)
 
@@ -45,6 +48,7 @@ class LoadBalancedAssignmentService(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            logger.error("assignHelper failed, falling back to configured fallback phone", e)
             fallbackPhone
         }
     }

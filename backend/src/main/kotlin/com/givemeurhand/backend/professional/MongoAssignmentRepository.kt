@@ -60,7 +60,12 @@ class MongoAssignmentRepository(
         collection.find(Filters.eq("professionalId", professionalId)).map { it.toAssignment() }.toList()
 
     override suspend fun close(assignmentId: String, professionalId: String): Boolean {
-        val filter = Filters.and(Filters.eq("_id", ObjectId(assignmentId)), Filters.eq("professionalId", professionalId))
+        val objectId = runCatching { ObjectId(assignmentId) }.getOrNull() ?: return false
+        val filter = Filters.and(
+            Filters.eq("_id", objectId),
+            Filters.eq("professionalId", professionalId),
+            Filters.eq("status", "active")
+        )
         val update = Updates.combine(Updates.set("status", "closed"), Updates.set("closedAt", Date()))
         return collection.updateOne(filter, update).modifiedCount > 0
     }
