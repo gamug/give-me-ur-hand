@@ -50,7 +50,11 @@ class MainActivity : ComponentActivity() {
                             })
                             ProfessionalLoginScreen(
                                 viewModel = viewModel,
-                                onLoggedIn = { navController.navigate("professionalDashboard") }
+                                onLoggedIn = {
+                                    navController.navigate("professionalDashboard") {
+                                        popUpTo("professionalLogin") { inclusive = true }
+                                    }
+                                }
                             )
                         }
                         composable("professionalDashboard") {
@@ -58,7 +62,15 @@ class MainActivity : ComponentActivity() {
                             val viewModel: ProfessionalDashboardViewModel = viewModel(factory = viewModelFactory {
                                 initializer { ProfessionalDashboardViewModel(app.professionalApiClient) }
                             })
-                            ProfessionalDashboardScreen(viewModel)
+                            ProfessionalDashboardScreen(
+                                viewModel = viewModel,
+                                onLogout = {
+                                    app.tokenStore.set(null)
+                                    navController.navigate("lobby") {
+                                        popUpTo("lobby") { inclusive = true }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
