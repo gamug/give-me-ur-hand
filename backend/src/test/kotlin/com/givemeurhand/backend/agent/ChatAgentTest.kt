@@ -33,6 +33,21 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `greeting returns a cordial reply without querying the knowledge base`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf("Hola", "SALUDO_CORTESIA"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+
+        val result = agent.handle("session-1", "hola")
+
+        assertEquals("greeting", result.kind)
+        assertEquals(true, result.reply.isNotBlank())
+        assertEquals(false, result.reply.contains("no está relacionada"))
+        // Only standardize + classify should have run; expand/answer would consume a 3rd/4th
+        // fake response and change lastSystemPrompt, so this proves RAG was never reached.
+        assertEquals(true, fake.lastSystemPrompt?.contains("Clasifica") == true)
+    }
+
+    @Test
     fun `normal question with matching chunks returns a grounded answer`() = runTest {
         val chunk = Chunk(id = "1", text = "Breathing exercises help.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
         val repo = FakeChunkRepository(

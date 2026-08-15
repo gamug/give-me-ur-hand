@@ -8,6 +8,11 @@ import com.givemeurhand.backend.rag.RagSearchStep
 
 data class AgentResult(val reply: String, val kind: String)
 
+private const val GREETING_MESSAGE =
+    "¡Hola! Estoy aquí para acompañarte y ayudarte a manejar cómo te sientes después del terremoto. " +
+        "Puedes contarme qué te preocupa o preguntarme sobre cómo sobrellevar la situación, y si en algún " +
+        "momento prefieres hablar con una persona real, solo dímelo."
+
 class ChatAgent(
     private val deepSeekClient: DeepSeekClient,
     private val chunkRepository: ChunkRepository,
@@ -20,6 +25,13 @@ class ChatAgent(
         if (intent == Intent.HUMAN_HELP_EXPLICIT || intent == Intent.CRISIS_RISK) {
             val phone = assignmentService.assignHelper(sessionId, clean)
             return AgentResult(humanHelpMessage(phone), "human_help")
+        }
+
+        // Greetings and social pleasantries are in scope (being cordial is part of the
+        // app's purpose) but won't semantically match any knowledge-base chunk, so they
+        // must not go through the RAG relevance check below.
+        if (intent == Intent.GREETING) {
+            return AgentResult(GREETING_MESSAGE, "greeting")
         }
 
         val reformulations = ExpandStep.run(clean, deepSeekClient)

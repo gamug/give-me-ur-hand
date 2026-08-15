@@ -19,6 +19,12 @@ class ClassifyStepTest {
     }
 
     @Test
+    fun `maps SALUDO_CORTESIA to GREETING`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf("SALUDO_CORTESIA"))
+        assertEquals(Intent.GREETING, ClassifyStep.run("hola", fake))
+    }
+
+    @Test
     fun `maps PREGUNTA_NORMAL to NORMAL_QUESTION`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf("PREGUNTA_NORMAL"))
         assertEquals(Intent.NORMAL_QUESTION, ClassifyStep.run("como manejo la ansiedad", fake))
