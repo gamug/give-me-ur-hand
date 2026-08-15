@@ -89,6 +89,20 @@ class ProfessionalDashboardViewModelTest {
         assertEquals(1, viewModel.uiState.value.cases.size)
         assertEquals(emptyList<String>(), api.closedCaseIds)
     }
+
+    @Test
+    fun `a closeCase that returns false surfaces an error and does not refresh`() = runTest {
+        val api = FakeProfessionalApiClient(cases = listOf(case("1")), closeResult = false)
+        val viewModel = ProfessionalDashboardViewModel(api)
+        advanceUntilIdle()
+
+        viewModel.closeCase("1")
+        advanceUntilIdle()
+
+        assertEquals("No pudimos cerrar el caso. Intenta de nuevo.", viewModel.uiState.value.errorMessage)
+        assertEquals(emptyList<String>(), api.closedCaseIds)
+        assertEquals(1, viewModel.uiState.value.cases.size)
+    }
 }
 
 /**

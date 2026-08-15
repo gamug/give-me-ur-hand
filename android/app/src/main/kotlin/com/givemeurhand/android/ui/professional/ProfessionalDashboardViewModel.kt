@@ -44,7 +44,11 @@ class ProfessionalDashboardViewModel(
     fun closeCase(caseId: String) {
         viewModelScope.launch {
             try {
-                if (professionalApiClient.closeCase(caseId)) refresh()
+                if (professionalApiClient.closeCase(caseId)) {
+                    refresh()
+                } else {
+                    _uiState.update { it.copy(errorMessage = "No pudimos cerrar el caso. Intenta de nuevo.") }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
