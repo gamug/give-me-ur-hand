@@ -1,14 +1,23 @@
 package com.givemeurhand.backend
 
 import com.givemeurhand.backend.agent.ChatAgent
-import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
+import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
+import com.givemeurhand.backend.professional.ASSIGNMENTS_COLLECTION
+import com.givemeurhand.backend.professional.AssignmentRepository
+import com.givemeurhand.backend.professional.JwtService
+import com.givemeurhand.backend.professional.LoadBalancedAssignmentService
+import com.givemeurhand.backend.professional.MongoAssignmentRepository
+import com.givemeurhand.backend.professional.MongoProfessionalRepository
+import com.givemeurhand.backend.professional.PROFESSIONALS_COLLECTION
+import com.givemeurhand.backend.professional.ProfessionalRepository
 import com.givemeurhand.backend.rag.KNOWLEDGE_CHUNKS_COLLECTION
 import com.givemeurhand.backend.rag.MongoChunkRepository
 import com.givemeurhand.backend.routes.TECHNICAL_ERROR_MESSAGE
 import com.givemeurhand.backend.routes.ChatResponse
 import com.givemeurhand.backend.routes.chatRoutes
+import com.givemeurhand.backend.routes.professionalRoutes
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -28,6 +37,12 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("com.givemeurhand.backend.Application")
 
+data class ProfessionalRouteDeps(
+    val professionalRepository: ProfessionalRepository,
+    val assignmentRepository: AssignmentRepository,
+    val jwtService: JwtService
+)
+
 fun main() {
     val config = AppConfig.fromEnv()
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
@@ -45,12 +60,16 @@ fun main() {
     val mongoClient = MongoClient.create(config.mongoUri)
     val database = mongoClient.getDatabase(config.mongoDatabase)
     val chunkRepository = MongoChunkRepository(database.getCollection<Document>(KNOWLEDGE_CHUNKS_COLLECTION))
+    val professionalRepository = MongoProfessionalRepository(database.getCollection<Document>(PROFESSIONALS_COLLECTION))
+    val assignmentRepository = MongoAssignmentRepository(database.getCollection<Document>(ASSIGNMENTS_COLLECTION))
+    val jwtService = JwtService(config.jwtSecret)
 
-    // Task 3 of the "Professional Coordination" plan replaces this line with a
-    // Mongo-backed AssignmentService — nothing else in this file changes.
-    val assignmentService = FallbackOnlyAssignmentService(config.fallbackHelpPhone)
+    val assignmentService: AssignmentService = LoadBalancedAssignmentService(
+        professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
+    )
 
     val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService)
+    val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(
         Thread {
@@ -59,10 +78,10 @@ fun main() {
         }
     )
 
-    embeddedServer(Netty, port = port) { module(agent) }.start(wait = true)
+    embeddedServer(Netty, port = port) { module(agent, professionalDeps) }.start(wait = true)
 }
 
-fun Application.module(agent: ChatAgent) {
+fun Application.module(agent: ChatAgent, professionalDeps: ProfessionalRouteDeps? = null) {
     install(ServerContentNegotiation) { json() }
     install(StatusPages) {
         exception<Throwable> { call, cause ->
@@ -73,5 +92,6 @@ fun Application.module(agent: ChatAgent) {
     routing {
         get("/health") { call.respond(HttpStatusCode.OK, mapOf("status" to "ok")) }
         chatRoutes(agent)
+        professionalDeps?.let { professionalRoutes(it.professionalRepository, it.assignmentRepository, it.jwtService) }
     }
 }
