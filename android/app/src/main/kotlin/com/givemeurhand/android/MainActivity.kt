@@ -16,6 +16,8 @@ import androidx.navigation.compose.rememberNavController
 import com.givemeurhand.android.ui.chat.ChatScreen
 import com.givemeurhand.android.ui.chat.ChatViewModel
 import com.givemeurhand.android.ui.lobby.LobbyScreen
+import com.givemeurhand.android.ui.professional.ProfessionalLoginScreen
+import com.givemeurhand.android.ui.professional.ProfessionalLoginViewModel
 import com.givemeurhand.android.ui.theme.GiveMeUrHandTheme
 
 class MainActivity : ComponentActivity() {
@@ -39,7 +41,16 @@ class MainActivity : ComponentActivity() {
                             })
                             ChatScreen(viewModel)
                         }
-                        composable("professionalLogin") { /* wired in Task 7 */ }
+                        composable("professionalLogin") {
+                            val app = LocalContext.current.applicationContext as GiveMeUrHandApp
+                            val viewModel: ProfessionalLoginViewModel = viewModel(factory = viewModelFactory {
+                                initializer { ProfessionalLoginViewModel(app.professionalApiClient) }
+                            })
+                            ProfessionalLoginScreen(
+                                viewModel = viewModel,
+                                onLoggedIn = { navController.navigate("professionalDashboard") }
+                            )
+                        }
                         composable("professionalDashboard") { /* wired in Task 8 */ }
                     }
                 }
