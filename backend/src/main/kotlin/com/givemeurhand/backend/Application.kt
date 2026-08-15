@@ -25,6 +25,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -49,7 +50,7 @@ fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
 
     val httpClient = HttpClient(CIO) {
-        install(ClientContentNegotiation) { json() }
+        install(ClientContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         install(HttpTimeout) {
             requestTimeoutMillis = 30_000
             connectTimeoutMillis = 10_000
