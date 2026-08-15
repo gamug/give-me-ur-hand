@@ -1,5 +1,6 @@
 package com.givemeurhand.backend.professional
 
+import org.bson.types.ObjectId
 import java.time.Instant
 
 class FakeAssignmentRepository : AssignmentRepository {
@@ -9,7 +10,7 @@ class FakeAssignmentRepository : AssignmentRepository {
     fun seed(professionalId: String, assignedAt: Instant, status: String = "active") {
         assignments.add(
             Assignment(
-                id = "seed-${assignments.size}",
+                id = ObjectId().toHexString(),
                 professionalId = professionalId,
                 sessionId = "seed-session",
                 reasonSnippet = "seed",
@@ -29,7 +30,7 @@ class FakeAssignmentRepository : AssignmentRepository {
     override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String): Assignment {
         createdCalls.add(Triple(professionalId, sessionId, reasonSnippet))
         val assignment = Assignment(
-            id = "gen-${assignments.size}",
+            id = ObjectId().toHexString(),
             professionalId = professionalId,
             sessionId = sessionId,
             reasonSnippet = reasonSnippet,
@@ -45,6 +46,9 @@ class FakeAssignmentRepository : AssignmentRepository {
         assignments.filter { it.professionalId == professionalId }
 
     override suspend fun close(assignmentId: String, professionalId: String): Boolean {
+        // Mirror MongoAssignmentRepository's contract: a malformed (non-ObjectId-shaped) id
+        // is rejected the same way it would be against a real Mongo collection.
+        if (!ObjectId.isValid(assignmentId)) return false
         val index = assignments.indexOfFirst { it.id == assignmentId && it.professionalId == professionalId }
         if (index == -1) return false
         assignments[index] = assignments[index].copy(status = "closed", closedAt = Instant.now())
