@@ -39,12 +39,15 @@ class MemoryServiceTest {
     }
 
     @Test
-    fun `recordTurn returns true only once, on the turn that crosses the threshold, not on every turn while at or above it`() = runTest {
-        // Regression for a double-fire bug: without a successful compactIfDue resetting the
-        // counter in between, messagesSinceCompaction stays at/above the threshold on every
-        // subsequent turn. recordTurn must only report "threshold crossed" on the one turn that
-        // reaches it exactly — otherwise ChatAgent would launch a new overlapping background
-        // monitor job on every turn thereafter, risking duplicate crisis assignments.
+    fun `recordTurn keeps returning true on every turn at or above the threshold, so a launch keeps being retried until compaction succeeds`() = runTest {
+        // Deliberately "at or above", not exact-crossing: compactIfDue's own failure path does NOT
+        // reset messagesSinceCompaction on a transient error, so a later call can retry compaction.
+        // If recordTurn only signaled "threshold crossed" on the exact turn that reaches it, a
+        // single failed compaction would permanently silence the monitor for that session (the
+        // counter keeps climbing past the threshold and would never exactly equal it again). The
+        // repeated launches this enables are safe: BackgroundMonitorAgent's in-flight guard
+        // ensures at most one evaluate() actually runs per session at a time, so this can't
+        // reintroduce the double-fire bug fixed alongside the guard.
         val sessionMemories = FakeSessionMemoryRepository()
         val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2, deepSeekClient = FakeDeepSeekClient(), maxSummaryChars = defaultMaxSummaryChars)
 
@@ -55,8 +58,51 @@ class MemoryServiceTest {
 
         assertFalse(turn1)
         assertTrue(turn2)
-        assertFalse(turn3)
-        assertFalse(turn4)
+        assertTrue(turn3)
+        assertTrue(turn4)
+    }
+
+    @Test
+    fun `a compactIfDue failure does not permanently disable future launches - a later successful call still compacts`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val chatMessages = FakeChatMessageRepository()
+        val throwingDeepSeek = object : com.givemeurhand.backend.deepseek.DeepSeekClient {
+            override suspend fun complete(systemPrompt: String, userPrompt: String, temperature: Double): String {
+                throw RuntimeException("deepseek unreachable")
+            }
+        }
+        val failingService = DefaultMemoryService(
+            chatMessages, sessionMemories, monitorIntervalMessages = 2,
+            deepSeekClient = throwingDeepSeek, maxSummaryChars = defaultMaxSummaryChars
+        )
+
+        // Turn crosses the threshold; recordTurn signals true and a compaction attempt is made
+        // (simulating ChatAgent's launch), but the DeepSeek call fails.
+        val turn1 = failingService.recordTurn("session-1", "uno", "resp uno")
+        val turn2 = failingService.recordTurn("session-1", "dos", "resp dos")
+        assertFalse(turn1)
+        assertTrue(turn2)
+
+        val failedAttempt = failingService.compactIfDue("session-1")
+        // Fails toward returning the current, unsummarized state — counter is NOT reset.
+        assertEquals(2, failedAttempt.messagesSinceCompaction)
+        assertEquals("", failedAttempt.summary)
+
+        // A later turn (still at/above threshold, since the counter was never reset) must still
+        // signal true — proving the failure did not permanently silence future launch attempts.
+        val turn3 = failingService.recordTurn("session-1", "tres", "resp tres")
+        assertTrue(turn3)
+        assertEquals(3, sessionMemories.get("session-1").messagesSinceCompaction)
+
+        // And once DeepSeek is healthy again, a retry succeeds and resets state as normal.
+        val workingDeepSeek = FakeDeepSeekClient(mutableListOf("resumen recuperado"))
+        val recoveredService = DefaultMemoryService(
+            chatMessages, sessionMemories, monitorIntervalMessages = 2,
+            deepSeekClient = workingDeepSeek, maxSummaryChars = defaultMaxSummaryChars
+        )
+        val recovered = recoveredService.compactIfDue("session-1")
+        assertEquals("resumen recuperado", recovered.summary)
+        assertEquals(0, recovered.messagesSinceCompaction)
     }
 
     @Test

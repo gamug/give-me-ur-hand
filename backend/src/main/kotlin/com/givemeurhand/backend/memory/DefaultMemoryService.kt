@@ -28,14 +28,18 @@ class DefaultMemoryService(
             val updated = memory.copy(messagesSinceCompaction = memory.messagesSinceCompaction + 1)
             sessionMemories.save(updated)
 
-            // Exact-crossing check, not "at or above": once messagesSinceCompaction reaches the
-            // threshold it stays there (or above) until a successful compactIfDue resets it to 0.
-            // Using >= here would launch a new background monitor job on every subsequent turn
-            // while at/above threshold, not just the one turn that crosses it — those jobs overlap
-            // in real time (each does a DeepSeek round-trip plus Mongo I/O) and can double-fire a
-            // crisis assignment for the same session. See BackgroundMonitorAgent's own in-flight
-            // guard for the defense-in-depth half of this fix.
-            updated.messagesSinceCompaction == monitorIntervalMessages
+            // Deliberately "at or above", not exact-crossing: compactIfDue's own failure path does
+            // NOT reset messagesSinceCompaction on a transient error, specifically so a later call
+            // can still find the threshold crossed and retry. An exact `==` check here would defeat
+            // that retry — after one failed compaction the counter keeps climbing past the
+            // threshold and `==` would never be true again, permanently silencing the monitor for
+            // that session with no error signal. Repeated launches while at/above threshold are
+            // safe: BackgroundMonitorAgent's in-flight guard (a ConcurrentHashMap-backed set,
+            // add-if-absent per session id) ensures at most one evaluate() actually runs per
+            // session at a time, so this can never double-fire a crisis assignment — a launch
+            // attempt either finds the guard held (no-op, a run is already in progress) or free
+            // (correctly retries a previously-failed compaction).
+            updated.messagesSinceCompaction >= monitorIntervalMessages
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
