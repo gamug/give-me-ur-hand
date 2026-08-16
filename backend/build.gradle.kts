@@ -26,6 +26,7 @@ dependencies {
     implementation("com.auth0:java-jwt:4.4.0")
     implementation("ch.qos.logback:logback-classic:1.5.6")
     implementation("org.apache.pdfbox:pdfbox:3.0.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
@@ -58,6 +59,14 @@ tasks.register<JavaExec>("seedProfessionals") {
     if (project.hasProperty("seedFile")) {
         args = listOf(project.property("seedFile") as String)
     }
+}
+
+tasks.register<JavaExec>("extractAlarmCriteria") {
+    group = "application"
+    description = "Extrae criterios de alarma (PEIVD) desde knowledge_chunks vía DeepSeek y los guarda en alarm_criteria"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.givemeurhand.backend.alarm.ExtractAlarmCriteriaKt")
+    environment(System.getenv())
 }
 
 tasks.test {

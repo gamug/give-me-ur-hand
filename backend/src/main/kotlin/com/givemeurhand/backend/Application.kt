@@ -1,9 +1,17 @@
 package com.givemeurhand.backend
 
 import com.givemeurhand.backend.agent.ChatAgent
+import com.givemeurhand.backend.alarm.ALARM_CRITERIA_COLLECTION
+import com.givemeurhand.backend.alarm.MongoAlarmCriteriaRepository
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
+import com.givemeurhand.backend.memory.CHAT_MESSAGES_COLLECTION
+import com.givemeurhand.backend.memory.DefaultMemoryService
+import com.givemeurhand.backend.memory.MongoChatMessageRepository
+import com.givemeurhand.backend.memory.MongoSessionMemoryRepository
+import com.givemeurhand.backend.memory.SESSION_MEMORY_COLLECTION
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.professional.ASSIGNMENTS_COLLECTION
 import com.givemeurhand.backend.professional.AssignmentRepository
 import com.givemeurhand.backend.professional.JwtService
@@ -19,6 +27,11 @@ import com.givemeurhand.backend.routes.ChatResponse
 import com.givemeurhand.backend.routes.chatRoutes
 import com.givemeurhand.backend.routes.professionalRoutes
 import com.mongodb.kotlin.client.coroutine.MongoClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.HttpTimeout
@@ -65,16 +78,41 @@ fun main() {
     val professionalRepository = MongoProfessionalRepository(database.getCollection<Document>(PROFESSIONALS_COLLECTION))
     val assignmentRepository = MongoAssignmentRepository(database.getCollection<Document>(ASSIGNMENTS_COLLECTION))
     val jwtService = JwtService(config.jwtSecret)
+    val chatMessageRepository = MongoChatMessageRepository(database.getCollection<Document>(CHAT_MESSAGES_COLLECTION))
+    val sessionMemoryRepository = MongoSessionMemoryRepository(database.getCollection<Document>(SESSION_MEMORY_COLLECTION))
+    val alarmCriteriaRepository = MongoAlarmCriteriaRepository(database.getCollection<Document>(ALARM_CRITERIA_COLLECTION))
 
     val assignmentService: AssignmentService = LoadBalancedAssignmentService(
         professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
     )
+    val memoryService = DefaultMemoryService(
+        chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages,
+        deepSeekClient, config.memorySummaryMaxChars
+    )
 
-    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService)
+    val alarmCriteria = runBlocking { alarmCriteriaRepository.getCurrent() }
+        ?: error("No alarm_criteria document found — run ./gradlew extractAlarmCriteria first")
+
+    val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val monitorAgent = BackgroundMonitorAgent(memoryService, alarmCriteria, deepSeekClient, assignmentService)
+
+    val agent = ChatAgent(
+        deepSeekClient,
+        chunkRepository,
+        assignmentService,
+        memoryService,
+        alarmCriteria,
+        config.fallbackHelpPhone,
+        config.consentMaxAttempts,
+        config.incoherenceMaxAttempts,
+        backgroundScope,
+        monitorAgent
+    )
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(
         Thread {
+            backgroundScope.cancel()
             mongoClient.close()
             httpClient.close()
         }

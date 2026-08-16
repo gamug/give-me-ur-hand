@@ -20,4 +20,16 @@ class AnswerStepTest {
         assertEquals("Respira profundo y busca un lugar seguro.", result)
         assertTrue(fake.lastSystemPrompt!!.contains("Grounding techniques help regulate breathing."))
     }
+
+    @Test
+    fun `system prompt does not instruct the model to suggest professional help`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf("Respira profundo."))
+        val chunks = listOf(
+            Chunk(id = "1", text = "Grounding techniques help regulate breathing.", sourceDocument = "pfa.pdf", page = 3, chunkIndex = 0)
+        )
+
+        AnswerStep.run("¿cómo calmo la ansiedad?", chunks, fake)
+
+        assertEquals(false, fake.lastSystemPrompt!!.contains("ayuda profesional"))
+    }
 }

@@ -4,8 +4,10 @@ import org.bson.types.ObjectId
 import java.time.Instant
 
 class FakeAssignmentRepository : AssignmentRepository {
+    data class CreateCall(val professionalId: String, val sessionId: String, val reasonSnippet: String, val triggerSource: String)
+
     private val assignments = mutableListOf<Assignment>()
-    val createdCalls = mutableListOf<Triple<String, String, String>>()
+    val createdCalls = mutableListOf<CreateCall>()
 
     fun seed(professionalId: String, assignedAt: Instant, status: String = "active") {
         assignments.add(
@@ -16,7 +18,12 @@ class FakeAssignmentRepository : AssignmentRepository {
                 reasonSnippet = "seed",
                 status = status,
                 assignedAt = assignedAt,
-                closedAt = null
+                closedAt = null,
+                consentStatus = "PENDING",
+                contactPhone = null,
+                consentEvidenceText = null,
+                consentTimestamp = null,
+                triggerSource = "immediate_triage"
             )
         )
     }
@@ -27,8 +34,8 @@ class FakeAssignmentRepository : AssignmentRepository {
     override suspend fun lastAssignedAt(professionalId: String): Instant? =
         assignments.filter { it.professionalId == professionalId }.maxOfOrNull { it.assignedAt }
 
-    override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String): Assignment {
-        createdCalls.add(Triple(professionalId, sessionId, reasonSnippet))
+    override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String, triggerSource: String): Assignment {
+        createdCalls.add(CreateCall(professionalId, sessionId, reasonSnippet, triggerSource))
         val assignment = Assignment(
             id = ObjectId().toHexString(),
             professionalId = professionalId,
@@ -36,7 +43,12 @@ class FakeAssignmentRepository : AssignmentRepository {
             reasonSnippet = reasonSnippet,
             status = "active",
             assignedAt = Instant.now(),
-            closedAt = null
+            closedAt = null,
+            consentStatus = "PENDING",
+            contactPhone = null,
+            consentEvidenceText = null,
+            consentTimestamp = null,
+            triggerSource = triggerSource
         )
         assignments.add(assignment)
         return assignment
@@ -52,6 +64,25 @@ class FakeAssignmentRepository : AssignmentRepository {
         val index = assignments.indexOfFirst { it.id == assignmentId && it.professionalId == professionalId }
         if (index == -1) return false
         assignments[index] = assignments[index].copy(status = "closed", closedAt = Instant.now())
+        return true
+    }
+
+    override suspend fun updateConsent(
+        assignmentId: String,
+        status: String,
+        contactPhone: String?,
+        evidenceText: String,
+        timestamp: Instant
+    ): Boolean {
+        if (!ObjectId.isValid(assignmentId)) return false
+        val index = assignments.indexOfFirst { it.id == assignmentId }
+        if (index == -1) return false
+        assignments[index] = assignments[index].copy(
+            consentStatus = status,
+            contactPhone = contactPhone,
+            consentEvidenceText = evidenceText,
+            consentTimestamp = timestamp
+        )
         return true
     }
 }

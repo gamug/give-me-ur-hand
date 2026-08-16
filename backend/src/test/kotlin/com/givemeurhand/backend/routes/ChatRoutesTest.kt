@@ -3,9 +3,12 @@ package com.givemeurhand.backend.routes
 
 import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.agent.FakeDeepSeekClient
+import com.givemeurhand.backend.agent.FakeMemoryService
+import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.module
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.rag.FakeChunkRepository
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -13,17 +16,44 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ChatRoutesTest {
+    private val alarmCriteria = AlarmCriteria(
+        version = 1,
+        generatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+        classificationPromptText = "criterios de prueba",
+        controlStrategiesText = "estrategias de prueba"
+    )
+
+    private fun noopMonitorAgent() = BackgroundMonitorAgent(
+        FakeMemoryService(), alarmCriteria, FakeDeepSeekClient(), FallbackOnlyAssignmentService("+57 3219699131")
+    )
+
     @Test
     fun `POST chat returns the agent result as JSON`() = testApplication {
         val fake = FakeDeepSeekClient(mutableListOf(
-            "cual es la capital de francia", "PREGUNTA_NORMAL", """["r1","r2","r3"]"""
+            "cual es la capital de francia",
+            """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""",
+            """["r1","r2","r3"]"""
         ))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(
+            fake,
+            FakeChunkRepository(emptyMap()),
+            FallbackOnlyAssignmentService("+57 3219699131"),
+            FakeMemoryService(),
+            alarmCriteria,
+            "+57 3219699131",
+            2,
+            2,
+            CoroutineScope(SupervisorJob()),
+            noopMonitorAgent()
+        )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 
@@ -44,7 +74,18 @@ class ChatRoutesTest {
                 throw RuntimeException("boom")
             }
         }
-        val agent = ChatAgent(throwing, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(
+            throwing,
+            FakeChunkRepository(emptyMap()),
+            FallbackOnlyAssignmentService("+57 3219699131"),
+            FakeMemoryService(),
+            alarmCriteria,
+            "+57 3219699131",
+            2,
+            2,
+            CoroutineScope(SupervisorJob()),
+            noopMonitorAgent()
+        )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 
