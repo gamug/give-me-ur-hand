@@ -56,6 +56,9 @@ class ChatAgentTest {
 
         assertEquals("human_help_pending_consent", result.kind)
         assertTrue(result.reply.contains("permiso"))
+        // A user who closes the app right after this message without ever answering must not be
+        // left with nothing: the very first consent ask must already carry the fallback phone.
+        assertTrue(result.reply.contains(fallbackPhone))
         assertEquals(
             listOf(FakeAssignmentService.AssignCall("session-1", "Quiero hablar con alguien", "immediate_triage")),
             assignmentService.assignHelperCalls
@@ -98,6 +101,9 @@ class ChatAgentTest {
 
         assertEquals("consent_granted", second.kind)
         assertTrue(second.reply.contains("Gracias"))
+        // The confirmation must echo back the actual parsed phone number, not just refer to "the
+        // number you shared" — otherwise a misparse by ConsentParseStep is silently unverifiable.
+        assertTrue(second.reply.contains("3001234567"))
         assertEquals(
             listOf(FakeAssignmentService.ConsentCall("assignment-1", true, "3001234567", "sí, mi número es 3001234567")),
             assignmentService.recordConsentCalls
@@ -142,12 +148,18 @@ class ChatAgentTest {
         val memoryService = FakeMemoryService()
         val agent = agent(fake, assignmentService, memoryService, consentMaxAttempts = 2)
 
-        agent.handle("session-1", "ya no kiero vivir")
+        val firstAsk = agent.handle("session-1", "ya no kiero vivir")
 
         val retry = agent.handle("session-1", "mmm no se")
         assertEquals("consent_clarify", retry.kind)
         assertTrue(memoryService.getState("session-1").pendingConsentRequest)
         assertEquals(1, memoryService.getState("session-1").consentAttempts)
+        // The ambiguous-retry re-ask must be worded differently from the very first consent ask —
+        // identical wording reads as a stuck bot to someone who just answered ambiguously.
+        assertTrue(retry.reply != firstAsk.reply)
+        // This may be the person's last chance to hear the fallback number before max attempts
+        // resolves to a decline, so it must also carry it.
+        assertTrue(retry.reply.contains(fallbackPhone))
 
         val resolved = agent.handle("session-1", "sigo sin saber")
         assertEquals("consent_declined", resolved.kind)

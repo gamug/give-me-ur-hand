@@ -175,6 +175,8 @@ class DefaultMemoryService(
             logger.error("compactIfDue failed for session $sessionId, returning current state without compacting", e)
             try {
                 sessionMemories.get(sessionId)
+            } catch (inner: CancellationException) {
+                throw inner
             } catch (inner: Exception) {
                 SessionMemory(sessionId)
             }

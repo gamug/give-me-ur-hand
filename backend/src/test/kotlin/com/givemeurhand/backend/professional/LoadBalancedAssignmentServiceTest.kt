@@ -113,6 +113,36 @@ class LoadBalancedAssignmentServiceTest {
     }
 
     @Test
+    fun `recordConsent with granted true maps to status GRANTED and persists the phone`() = runTest {
+        val profs = FakeProfessionalRepository(emptyList())
+        val assignments = FakeAssignmentRepository()
+        val created = assignments.create("p1", "session-1", "necesito ayuda", "immediate_triage")
+
+        val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
+        service.recordConsent(created.id, granted = true, phone = "3001234567", evidenceText = "si, mi numero es 3001234567")
+
+        val updated = assignments.findByProfessional("p1").single { it.id == created.id }
+        assertEquals("GRANTED", updated.consentStatus)
+        assertEquals("3001234567", updated.contactPhone)
+        assertEquals("si, mi numero es 3001234567", updated.consentEvidenceText)
+    }
+
+    @Test
+    fun `recordConsent with granted false maps to status DECLINED and stores no phone`() = runTest {
+        val profs = FakeProfessionalRepository(emptyList())
+        val assignments = FakeAssignmentRepository()
+        val created = assignments.create("p1", "session-1", "necesito ayuda", "immediate_triage")
+
+        val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
+        service.recordConsent(created.id, granted = false, phone = null, evidenceText = "no, prefiero no compartir")
+
+        val updated = assignments.findByProfessional("p1").single { it.id == created.id }
+        assertEquals("DECLINED", updated.consentStatus)
+        assertEquals(null, updated.contactPhone)
+        assertEquals("no, prefiero no compartir", updated.consentEvidenceText)
+    }
+
+    @Test
     fun `recordConsent swallows a repository throw instead of propagating`() = runTest {
         val throwingAssignmentRepository = object : AssignmentRepository {
             override suspend fun countActiveSince(professionalId: String, since: Instant): Int = 0

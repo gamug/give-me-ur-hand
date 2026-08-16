@@ -18,13 +18,16 @@ import java.util.concurrent.ConcurrentHashMap
  * threshold is crossed — it must never block or fail a request, so [evaluate] must never throw.
  *
  * [evaluate] is launched fire-and-forget per turn that crosses the threshold; ChatAgent's launch
- * gate (an exact threshold-crossing check) already prevents most re-launches, but a second,
- * independent request for the same session can still race a still-running evaluation (each run
- * does a DeepSeek round-trip plus Mongo I/O, realistically 5-15 seconds). The [inProgress] guard
- * below is defense in depth for that narrower true-concurrency case: without it, two overlapping
- * runs could both read `pendingConsentRequest == false`, both pass, and both call [assignHelper],
- * creating two assignments for one alarm with only the last one ever getting a pendingAssignmentId
- * attached — the other silently orphaned as a permanently-open, no-consent case.
+ * gate is deliberately an "at or above" comparison, not an exact-crossing check (see
+ * [com.givemeurhand.backend.memory.DefaultMemoryService.recordTurn]), so it can re-launch on every
+ * subsequent turn while a session sits at or above the threshold — e.g. after a prior compaction
+ * failure. The [inProgress] guard below is what actually prevents double-firing: without it, two
+ * overlapping runs for the same session (whether from repeated launches while at/above threshold,
+ * or a second independent request racing a still-running evaluation — each run does a DeepSeek
+ * round-trip plus Mongo I/O, realistically 5-15 seconds) could both read
+ * `pendingConsentRequest == false`, both pass, and both call [assignHelper], creating two
+ * assignments for one alarm with only the last one ever getting a pendingAssignmentId attached —
+ * the other silently orphaned as a permanently-open, no-consent case.
  */
 class BackgroundMonitorAgent(
     private val memoryService: MemoryService,
@@ -48,6 +51,9 @@ class BackgroundMonitorAgent(
             try {
                 val memory = memoryService.compactIfDue(sessionId)
                 if (memory.pendingConsentRequest) return // already awaiting consent from a prior trigger — never double-fire
+                if (memory.summary.isBlank()) return // never compacted (or compaction still failing) — nothing to classify yet;
+                // AlarmClassifyStep's fail-safe-on-parse-failure logic would otherwise grade a
+                // blank/malformed string as ROJO and manufacture a false crisis.
 
                 val triage = AlarmClassifyStep.run(memory.summary, alarmCriteria, deepSeekClient)
                 if (triage.color == TriageColor.ROJO) {

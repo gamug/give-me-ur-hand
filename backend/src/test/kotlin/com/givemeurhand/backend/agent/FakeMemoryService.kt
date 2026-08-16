@@ -13,6 +13,11 @@ class FakeMemoryService : MemoryService {
 
     val compactIfDueCalls = mutableListOf<String>()
 
+    /** Seeds a specific [SessionMemory] for a session, e.g. so [compactIfDue]/[getState] return a real (non-blank) summary. */
+    fun seed(sessionId: String, memory: SessionMemory) {
+        states[sessionId] = memory
+    }
+
     override suspend fun recordTurn(sessionId: String, userText: String, replyText: String): Boolean {
         recordedCalls.add(Triple(sessionId, userText, replyText))
         return nextRecordTurnResult

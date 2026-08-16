@@ -18,13 +18,10 @@ private const val GREETING_MESSAGE =
     "¡Hola! Estoy aquí para acompañarte y ayudarte a manejar cómo te sientes después del terremoto. " +
         "Puedes contarme qué te preocupa o preguntarme sobre cómo sobrellevar la situación."
 
-private const val CONSENT_REQUEST_MESSAGE =
+private const val CONSENT_REQUEST_MESSAGE_BASE =
     "He notado que esto es difícil y me gustaría conectarte con una persona real que pueda ayudarte. " +
         "¿Me das tu permiso para compartir tus datos con un profesional? Si es así, ¿a qué número de " +
         "teléfono te pueden contactar?"
-
-private const val CONSENT_GRANTED_MESSAGE =
-    "Gracias, un profesional se pondrá en contacto contigo pronto al número que compartiste."
 
 class ChatAgent(
     private val deepSeekClient: DeepSeekClient,
@@ -108,7 +105,7 @@ class ChatAgent(
                 evidenceText = rawMessage
             )
             memoryService.clearPendingConsent(sessionId)
-            return AgentResult(CONSENT_GRANTED_MESSAGE, "consent_granted")
+            return AgentResult(consentGrantedMessage(parsed.phone), "consent_granted")
         }
 
         if (parsed.consents == false) {
@@ -125,7 +122,7 @@ class ChatAgent(
         // Ambiguous: consents == null, or consents == true with a missing phone number.
         val attempts = memoryService.incrementConsentAttempts(sessionId)
         if (attempts < consentMaxAttempts) {
-            return AgentResult(CONSENT_REQUEST_MESSAGE, "consent_clarify")
+            return AgentResult(consentClarifyMessage(), "consent_clarify")
         }
 
         assignmentService.recordConsent(
@@ -142,7 +139,7 @@ class ChatAgent(
         val result = assignmentService.assignHelper(sessionId, reason, triggerSource)
         if (result.assignmentId != null) {
             memoryService.setPendingConsent(sessionId, result.assignmentId)
-            return AgentResult(CONSENT_REQUEST_MESSAGE, "human_help_pending_consent")
+            return AgentResult(consentRequestMessage(), "human_help_pending_consent")
         }
         // No professional available at all — nothing to attach consent to, fall back exactly like today.
         return AgentResult(humanHelpFallbackMessage(result.phone), "human_help")
@@ -154,4 +151,21 @@ class ChatAgent(
     private fun consentDeclinedMessage() =
         "Entiendo, respeto tu decisión. Si en algún momento cambias de opinión o necesitas hablar con una persona real, " +
             "puedes comunicarte con este número: $fallbackHelpPhone"
+
+    // A ROJO-graded user who closes the app without answering the consent question must not be
+    // left with nothing: the initial ask always carries the fallback phone as an immediate
+    // callback option, independent of whether they ever grant consent to share their data.
+    private fun consentRequestMessage() =
+        "$CONSENT_REQUEST_MESSAGE_BASE Y si necesitas hablar con alguien ahora mismo, puedes llamar a este número: $fallbackHelpPhone."
+
+    // Used only for the ambiguous-retry branch of handlePendingConsent, so a person who answered
+    // unclearly gets a distinct clarifying follow-up instead of the identical first ask (which
+    // reads as a stuck bot). Also carries the fallback phone since this may be the person's last
+    // chance to hear it before max attempts resolves to a decline.
+    private fun consentClarifyMessage() =
+        "No estoy seguro de haber entendido. ¿Me confirmas si quieres que comparta tus datos con un profesional, y a qué número te pueden llamar? " +
+            "Si necesitas hablar con alguien ahora mismo, puedes llamar a este número: $fallbackHelpPhone."
+
+    private fun consentGrantedMessage(phone: String) =
+        "Gracias, un profesional se pondrá en contacto contigo pronto al número que compartiste: $phone."
 }

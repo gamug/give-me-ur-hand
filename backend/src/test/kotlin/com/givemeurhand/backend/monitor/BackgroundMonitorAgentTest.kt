@@ -34,6 +34,7 @@ class BackgroundMonitorAgentTest {
     @Test
     fun `ROJO triggers assignHelper then setPendingConsent exactly once`() = runTest {
         val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario expresó ideación suicida."))
         val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
         val monitor = BackgroundMonitorAgent(
             memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), assignmentService
@@ -43,7 +44,7 @@ class BackgroundMonitorAgentTest {
 
         assertEquals(1, assignmentService.assignHelperCalls.size)
         assertEquals(
-            FakeAssignmentService.AssignCall("session-1", "", "background_monitor"),
+            FakeAssignmentService.AssignCall("session-1", "El usuario expresó ideación suicida.", "background_monitor"),
             assignmentService.assignHelperCalls.single()
         )
         val state = memoryService.getState("session-1")
@@ -54,6 +55,7 @@ class BackgroundMonitorAgentTest {
     @Test
     fun `AMARILLO triggers neither assignHelper nor setPendingConsent`() = runTest {
         val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario se siente ansioso pero estable."))
         val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
         val monitor = BackgroundMonitorAgent(
             memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(amarilloClassification)), assignmentService
@@ -68,6 +70,7 @@ class BackgroundMonitorAgentTest {
     @Test
     fun `VERDE triggers neither assignHelper nor setPendingConsent`() = runTest {
         val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario está tranquilo."))
         val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
         val monitor = BackgroundMonitorAgent(
             memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(verdeClassification)), assignmentService
@@ -82,6 +85,7 @@ class BackgroundMonitorAgentTest {
     @Test
     fun `ROJO with no professional available sets no pending consent and does not crash`() = runTest {
         val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario expresó ideación suicida."))
         val assignmentService = FakeAssignmentService(assignmentId = null)
         val monitor = BackgroundMonitorAgent(
             memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), assignmentService
@@ -91,6 +95,44 @@ class BackgroundMonitorAgentTest {
 
         assertEquals(1, assignmentService.assignHelperCalls.size)
         assertEquals(false, memoryService.getState("session-1").pendingConsentRequest)
+    }
+
+    @Test
+    fun `a blank, never-compacted summary is never sent to triage and does nothing`() = runTest {
+        val memoryService = FakeMemoryService()
+        // No seed() call: getState/compactIfDue return the default SessionMemory, whose summary is "".
+        val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
+        // Only one response queued; if evaluate() called AlarmClassifyStep at all, FakeDeepSeekClient
+        // would throw on running out of queued responses, failing this test.
+        val monitor = BackgroundMonitorAgent(
+            memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), assignmentService
+        )
+
+        monitor.evaluate("session-1")
+
+        assertEquals(emptyList<FakeAssignmentService.AssignCall>(), assignmentService.assignHelperCalls)
+        assertEquals(false, memoryService.getState("session-1").pendingConsentRequest)
+    }
+
+    @Test
+    fun `a real seeded non-blank summary that grades ROJO calls assignHelper with that summary as the reason`() = runTest {
+        val memoryService = FakeMemoryService()
+        val realSummary = "El usuario ha mencionado repetidamente que no quiere seguir viviendo tras el terremoto."
+        memoryService.seed("session-1", SessionMemory("session-1", summary = realSummary))
+        val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
+        val monitor = BackgroundMonitorAgent(
+            memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), assignmentService
+        )
+
+        monitor.evaluate("session-1")
+
+        assertEquals(
+            listOf(FakeAssignmentService.AssignCall("session-1", realSummary, "background_monitor")),
+            assignmentService.assignHelperCalls
+        )
+        val state = memoryService.getState("session-1")
+        assertTrue(state.pendingConsentRequest)
+        assertEquals("assignment-1", state.pendingAssignmentId)
     }
 
     @Test
@@ -112,6 +154,7 @@ class BackgroundMonitorAgentTest {
     @Test
     fun `two concurrent evaluate calls for the same session - the second is a no-op, not a duplicate assignment`() = runTest {
         val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario expresó ideación suicida."))
         val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
         // Simulates the real round-trip latency (DeepSeek call plus Mongo I/O) that lets a second
         // evaluate() call for the same session race in while the first is still running.
@@ -162,8 +205,10 @@ class BackgroundMonitorAgentTest {
                 throw RuntimeException("deepseek unreachable")
             }
         }
+        val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario expresó ideación suicida."))
         val monitor = BackgroundMonitorAgent(
-            FakeMemoryService(), alarmCriteria, throwingDeepSeek, FakeAssignmentService()
+            memoryService, alarmCriteria, throwingDeepSeek, FakeAssignmentService()
         )
 
         // Must not throw.
@@ -178,8 +223,10 @@ class BackgroundMonitorAgentTest {
             }
             override suspend fun recordConsent(assignmentId: String, granted: Boolean, phone: String?, evidenceText: String) {}
         }
+        val memoryService = FakeMemoryService()
+        memoryService.seed("session-1", SessionMemory("session-1", summary = "El usuario expresó ideación suicida."))
         val monitor = BackgroundMonitorAgent(
-            FakeMemoryService(), alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), throwingAssignmentService
+            memoryService, alarmCriteria, FakeDeepSeekClient(mutableListOf(rojoClassification)), throwingAssignmentService
         )
 
         // Must not throw.
