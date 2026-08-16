@@ -6,8 +6,11 @@ import com.givemeurhand.backend.alarm.TriageColor
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.memory.MemoryService
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.rag.ChunkRepository
 import com.givemeurhand.backend.rag.RagSearchStep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 data class AgentResult(val reply: String, val kind: String)
 
@@ -31,11 +34,18 @@ class ChatAgent(
     private val alarmCriteria: AlarmCriteria,
     private val fallbackHelpPhone: String,
     private val consentMaxAttempts: Int,
-    private val incoherenceMaxAttempts: Int
+    private val incoherenceMaxAttempts: Int,
+    private val backgroundScope: CoroutineScope,
+    private val monitorAgent: BackgroundMonitorAgent
 ) {
     suspend fun handle(sessionId: String, rawMessage: String): AgentResult {
         val result = handleInner(sessionId, rawMessage)
-        memoryService.recordTurn(sessionId, rawMessage, result.reply)
+        val thresholdCrossed = memoryService.recordTurn(sessionId, rawMessage, result.reply)
+        if (thresholdCrossed) {
+            // Launched on the app-level backgroundScope (not this request's own coroutine), so
+            // this job runs independently and does not delay the HTTP response.
+            backgroundScope.launch { monitorAgent.evaluate(sessionId) }
+        }
         return result
     }
 

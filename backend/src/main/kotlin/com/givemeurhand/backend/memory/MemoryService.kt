@@ -46,4 +46,19 @@ interface MemoryService {
 
     /** Resets redirectAttempts to 0. Called on any coherent message. */
     suspend fun resetRedirectAttempts(sessionId: String)
+
+    /**
+     * When [SessionMemory.messagesSinceCompaction] has reached the configured threshold, folds
+     * the most recent turns into an updated running summary (via a DeepSeek call), persists it
+     * with messagesSinceCompaction reset to 0, and returns the updated state. Under threshold,
+     * this is a no-op (no DeepSeek call) that returns the current state unchanged.
+     *
+     * Contract: implementations MUST NOT throw. This is called from [BackgroundMonitorAgent],
+     * itself launched fire-and-forget from ChatAgent.handle with no surrounding try/catch at
+     * this call site — a transient failure here (compaction DeepSeek call included) must not
+     * crash the background job. On internal failure, implementations MUST fail toward returning
+     * the current, unsummarized state (not toward throwing or toward silently discarding
+     * messagesSinceCompaction) so a later retry can still find the threshold crossed.
+     */
+    suspend fun compactIfDue(sessionId: String): SessionMemory
 }

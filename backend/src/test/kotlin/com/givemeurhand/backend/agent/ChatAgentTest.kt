@@ -3,8 +3,12 @@ package com.givemeurhand.backend.agent
 
 import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.rag.Chunk
 import com.givemeurhand.backend.rag.FakeChunkRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import kotlin.test.Test
@@ -28,8 +32,15 @@ class ChatAgentTest {
         memoryService: FakeMemoryService = FakeMemoryService(),
         consentMaxAttempts: Int = 2,
         chunkRepository: FakeChunkRepository = FakeChunkRepository(emptyMap()),
-        incoherenceMaxAttempts: Int = 2
-    ) = ChatAgent(fake, chunkRepository, assignmentService, memoryService, alarmCriteria, fallbackPhone, consentMaxAttempts, incoherenceMaxAttempts)
+        incoherenceMaxAttempts: Int = 2,
+        backgroundScope: CoroutineScope = CoroutineScope(SupervisorJob()),
+        monitorAgent: BackgroundMonitorAgent = BackgroundMonitorAgent(
+            FakeMemoryService(), alarmCriteria, FakeDeepSeekClient(), FakeAssignmentService()
+        )
+    ) = ChatAgent(
+        fake, chunkRepository, assignmentService, memoryService, alarmCriteria, fallbackPhone,
+        consentMaxAttempts, incoherenceMaxAttempts, backgroundScope, monitorAgent
+    )
 
     @Test
     fun `explicit human help request starts the consent flow instead of a one-way phone hand-off`() = runTest {
@@ -433,5 +444,40 @@ class ChatAgentTest {
         assertEquals("redirect", third.kind)
         assertEquals("redirect reply 2", third.reply)
         assertEquals(1, memoryService.getState("session-1").redirectAttempts)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `the background monitor fires only once the message-count threshold is crossed`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "Hola", // standardize, turn 1
+            """{"color":"VERDE","intent":"SALUDO","coherente":true,"quiere_ser_escuchado":false}""", // classify, turn 1
+            "Hola otra vez", // standardize, turn 2
+            """{"color":"VERDE","intent":"SALUDO","coherente":true,"quiere_ser_escuchado":false}""" // classify, turn 2
+        ))
+        val memoryService = FakeMemoryService()
+        val monitorMemoryService = FakeMemoryService()
+        val monitorAgent = BackgroundMonitorAgent(
+            monitorMemoryService,
+            alarmCriteria,
+            FakeDeepSeekClient(mutableListOf("""{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""")),
+            FakeAssignmentService()
+        )
+        val chatAgent = agent(fake, memoryService = memoryService, backgroundScope = this, monitorAgent = monitorAgent)
+
+        // Below threshold: recordTurn reports the threshold has not been crossed, so the monitor
+        // must never fire.
+        memoryService.nextRecordTurnResult = false
+        chatAgent.handle("session-1", "hola")
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), monitorMemoryService.compactIfDueCalls)
+
+        // Threshold crossed: the monitor must fire exactly once, on the app-level backgroundScope
+        // (here the test's TestScope), so its side effects are deterministically observable after
+        // draining the scheduler instead of being awaited inline.
+        memoryService.nextRecordTurnResult = true
+        chatAgent.handle("session-1", "hola otra vez")
+        advanceUntilIdle()
+        assertEquals(listOf("session-1"), monitorMemoryService.compactIfDueCalls)
     }
 }

@@ -8,9 +8,14 @@ class FakeMemoryService : MemoryService {
     val recordedCalls = mutableListOf<Triple<String, String, String>>()
     private val states = mutableMapOf<String, SessionMemory>()
 
+    /** Controls what [recordTurn] returns, so tests can simulate the message-count threshold being crossed. */
+    var nextRecordTurnResult: Boolean = false
+
+    val compactIfDueCalls = mutableListOf<String>()
+
     override suspend fun recordTurn(sessionId: String, userText: String, replyText: String): Boolean {
         recordedCalls.add(Triple(sessionId, userText, replyText))
-        return false
+        return nextRecordTurnResult
     }
 
     override suspend fun getState(sessionId: String): SessionMemory =
@@ -43,5 +48,10 @@ class FakeMemoryService : MemoryService {
     override suspend fun resetRedirectAttempts(sessionId: String) {
         val current = states[sessionId] ?: SessionMemory(sessionId)
         states[sessionId] = current.copy(redirectAttempts = 0)
+    }
+
+    override suspend fun compactIfDue(sessionId: String): SessionMemory {
+        compactIfDueCalls.add(sessionId)
+        return states[sessionId] ?: SessionMemory(sessionId)
     }
 }

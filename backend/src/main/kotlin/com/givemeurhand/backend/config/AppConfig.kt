@@ -11,7 +11,8 @@ data class AppConfig(
     val assignmentMaxAgeHours: Long,
     val monitorIntervalMessages: Int,
     val consentMaxAttempts: Int,
-    val incoherenceMaxAttempts: Int
+    val incoherenceMaxAttempts: Int,
+    val memorySummaryMaxChars: Int
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -29,7 +30,8 @@ data class AppConfig(
                 assignmentMaxAgeHours = (env["ASSIGNMENT_MAX_AGE_HOURS"] ?: "4").toLong(),
                 monitorIntervalMessages = (env["MONITOR_INTERVAL_MESSAGES"] ?: "6").toInt(),
                 consentMaxAttempts = (env["CONSENT_MAX_ATTEMPTS"] ?: "2").toInt(),
-                incoherenceMaxAttempts = (env["INCOHERENCE_MAX_ATTEMPTS"] ?: "3").toInt()
+                incoherenceMaxAttempts = (env["INCOHERENCE_MAX_ATTEMPTS"] ?: "3").toInt(),
+                memorySummaryMaxChars = (env["MEMORY_SUMMARY_MAX_CHARS"] ?: "2000").toInt()
             )
         }
     }

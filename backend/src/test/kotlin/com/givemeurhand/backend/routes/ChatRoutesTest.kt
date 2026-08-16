@@ -8,6 +8,7 @@ import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.module
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.rag.FakeChunkRepository
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -15,6 +16,8 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,6 +29,10 @@ class ChatRoutesTest {
         generatedAt = Instant.parse("2026-01-01T00:00:00Z"),
         classificationPromptText = "criterios de prueba",
         controlStrategiesText = "estrategias de prueba"
+    )
+
+    private fun noopMonitorAgent() = BackgroundMonitorAgent(
+        FakeMemoryService(), alarmCriteria, FakeDeepSeekClient(), FallbackOnlyAssignmentService("+57 3219699131")
     )
 
     @Test
@@ -43,7 +50,9 @@ class ChatRoutesTest {
             alarmCriteria,
             "+57 3219699131",
             2,
-            2
+            2,
+            CoroutineScope(SupervisorJob()),
+            noopMonitorAgent()
         )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
@@ -73,7 +82,9 @@ class ChatRoutesTest {
             alarmCriteria,
             "+57 3219699131",
             2,
-            2
+            2,
+            CoroutineScope(SupervisorJob()),
+            noopMonitorAgent()
         )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }

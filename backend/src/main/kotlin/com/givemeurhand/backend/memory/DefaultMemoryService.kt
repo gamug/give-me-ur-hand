@@ -1,13 +1,17 @@
 // backend/src/main/kotlin/com/givemeurhand/backend/memory/DefaultMemoryService.kt
 package com.givemeurhand.backend.memory
 
+import com.givemeurhand.backend.agent.CompactionStep
+import com.givemeurhand.backend.deepseek.DeepSeekClient
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
 class DefaultMemoryService(
     private val chatMessages: ChatMessageRepository,
     private val sessionMemories: SessionMemoryRepository,
-    private val monitorIntervalMessages: Int
+    private val monitorIntervalMessages: Int,
+    private val deepSeekClient: DeepSeekClient,
+    private val maxSummaryChars: Int
 ) : MemoryService {
 
     private val logger = LoggerFactory.getLogger(DefaultMemoryService::class.java)
@@ -128,6 +132,34 @@ class DefaultMemoryService(
             throw e
         } catch (e: Exception) {
             logger.error("resetRedirectAttempts failed for session $sessionId, continuing without recording", e)
+        }
+    }
+
+    override suspend fun compactIfDue(sessionId: String): SessionMemory {
+        // Contract (see MemoryService KDoc): must never throw — this runs inside the fire-and-
+        // forget background monitor job with no surrounding try/catch at this call site. On
+        // failure, fail toward returning the current (unsummarized) state rather than throwing,
+        // so a later call can still find the threshold crossed and retry compaction.
+        return try {
+            val current = sessionMemories.get(sessionId)
+            if (current.messagesSinceCompaction < monitorIntervalMessages) {
+                return current
+            }
+
+            val recentTurns = chatMessages.lastN(sessionId, monitorIntervalMessages)
+            val updatedSummary = CompactionStep.run(current.summary, recentTurns, deepSeekClient).take(maxSummaryChars)
+            val updated = current.copy(summary = updatedSummary, messagesSinceCompaction = 0)
+            sessionMemories.save(updated)
+            updated
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.error("compactIfDue failed for session $sessionId, returning current state without compacting", e)
+            try {
+                sessionMemories.get(sessionId)
+            } catch (inner: Exception) {
+                SessionMemory(sessionId)
+            }
         }
     }
 }

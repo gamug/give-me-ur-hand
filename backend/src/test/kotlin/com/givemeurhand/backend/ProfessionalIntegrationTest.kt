@@ -6,6 +6,7 @@ import com.givemeurhand.backend.agent.FakeDeepSeekClient
 import com.givemeurhand.backend.agent.FakeMemoryService
 import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.professional.FakeAssignmentRepository
 import com.givemeurhand.backend.professional.FakeProfessionalRepository
 import com.givemeurhand.backend.professional.JwtService
@@ -15,6 +16,8 @@ import com.givemeurhand.backend.rag.FakeChunkRepository
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,7 +48,11 @@ class ProfessionalIntegrationTest {
         alarmCriteria,
         "+57 3219699131",
         2,
-        2
+        2,
+        CoroutineScope(SupervisorJob()),
+        BackgroundMonitorAgent(
+            FakeMemoryService(), alarmCriteria, FakeDeepSeekClient(), FallbackOnlyAssignmentService("+57 3219699131")
+        )
     )
 
     private fun professionalDeps(

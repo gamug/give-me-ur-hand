@@ -22,6 +22,7 @@ class AppConfigTest {
         assertEquals(6, config.monitorIntervalMessages)
         assertEquals(2, config.consentMaxAttempts)
         assertEquals(3, config.incoherenceMaxAttempts)
+        assertEquals(2000, config.memorySummaryMaxChars)
     }
 
     @Test
@@ -53,5 +54,11 @@ class AppConfigTest {
     fun `reads INCOHERENCE_MAX_ATTEMPTS override when present`() {
         val config = AppConfig.fromEnv(requiredOnly + mapOf("INCOHERENCE_MAX_ATTEMPTS" to "5"))
         assertEquals(5, config.incoherenceMaxAttempts)
+    }
+
+    @Test
+    fun `reads MEMORY_SUMMARY_MAX_CHARS override when present`() {
+        val config = AppConfig.fromEnv(requiredOnly + mapOf("MEMORY_SUMMARY_MAX_CHARS" to "500"))
+        assertEquals(500, config.memorySummaryMaxChars)
     }
 }

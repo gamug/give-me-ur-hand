@@ -11,6 +11,7 @@ import com.givemeurhand.backend.memory.DefaultMemoryService
 import com.givemeurhand.backend.memory.MongoChatMessageRepository
 import com.givemeurhand.backend.memory.MongoSessionMemoryRepository
 import com.givemeurhand.backend.memory.SESSION_MEMORY_COLLECTION
+import com.givemeurhand.backend.monitor.BackgroundMonitorAgent
 import com.givemeurhand.backend.professional.ASSIGNMENTS_COLLECTION
 import com.givemeurhand.backend.professional.AssignmentRepository
 import com.givemeurhand.backend.professional.JwtService
@@ -26,6 +27,10 @@ import com.givemeurhand.backend.routes.ChatResponse
 import com.givemeurhand.backend.routes.chatRoutes
 import com.givemeurhand.backend.routes.professionalRoutes
 import com.mongodb.kotlin.client.coroutine.MongoClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -80,10 +85,16 @@ fun main() {
     val assignmentService: AssignmentService = LoadBalancedAssignmentService(
         professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
     )
-    val memoryService = DefaultMemoryService(chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages)
+    val memoryService = DefaultMemoryService(
+        chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages,
+        deepSeekClient, config.memorySummaryMaxChars
+    )
 
     val alarmCriteria = runBlocking { alarmCriteriaRepository.getCurrent() }
         ?: error("No alarm_criteria document found — run ./gradlew extractAlarmCriteria first")
+
+    val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val monitorAgent = BackgroundMonitorAgent(memoryService, alarmCriteria, deepSeekClient, assignmentService)
 
     val agent = ChatAgent(
         deepSeekClient,
@@ -93,12 +104,15 @@ fun main() {
         alarmCriteria,
         config.fallbackHelpPhone,
         config.consentMaxAttempts,
-        config.incoherenceMaxAttempts
+        config.incoherenceMaxAttempts,
+        backgroundScope,
+        monitorAgent
     )
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(
         Thread {
+            backgroundScope.cancel()
             mongoClient.close()
             httpClient.close()
         }
