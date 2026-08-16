@@ -23,6 +23,12 @@ interface MemoryService {
     /** Sets pendingConsentRequest=false, pendingAssignmentId=null, consentAttempts=0. */
     suspend fun clearPendingConsent(sessionId: String)
 
-    /** Increments consentAttempts and returns the new count. */
+    /**
+     * Increments consentAttempts and returns the new count. On internal failure, implementations
+     * MUST fail toward "attempts exhausted" (a value that reliably fails any `attempts <
+     * consentMaxAttempts` check), NOT toward "keep re-asking" — a caller stuck retrying forever
+     * because a write is silently failing would never surface the fallback phone to someone who
+     * may be in genuine crisis.
+     */
     suspend fun incrementConsentAttempts(sessionId: String): Int
 }

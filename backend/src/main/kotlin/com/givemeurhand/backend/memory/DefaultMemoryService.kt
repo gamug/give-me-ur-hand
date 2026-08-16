@@ -83,8 +83,17 @@ class DefaultMemoryService(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logger.error("incrementConsentAttempts failed for session $sessionId, returning 0", e)
-            0
+            // Fail toward "attempts exhausted", not "keep re-asking forever". If reads still work
+            // but this write is failing (e.g. a Mongo primary stepdown or write-concern failure —
+            // a real partial-outage mode, not just a hypothetical), getState will keep reporting
+            // pendingConsentRequest=true while this call never durably increments the counter. A
+            // low/zero fallback here would make the ambiguous branch's `attempts < consentMaxAttempts`
+            // check pass forever, so the person is asked the same consent question indefinitely and
+            // never sees the fallback phone. Returning Int.MAX_VALUE guarantees that check fails
+            // regardless of the configured consentMaxAttempts, so the caller resolves to the decline
+            // path — which still hands the person fallbackHelpPhone, so no one is left stranded.
+            logger.error("incrementConsentAttempts failed for session $sessionId, treating attempts as exhausted", e)
+            Int.MAX_VALUE
         }
     }
 }

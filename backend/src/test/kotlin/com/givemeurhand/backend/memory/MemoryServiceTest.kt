@@ -103,7 +103,7 @@ class MemoryServiceTest {
     }
 
     @Test
-    fun `setPendingConsent, clearPendingConsent and incrementConsentAttempts swallow repository failures`() = runTest {
+    fun `setPendingConsent and clearPendingConsent swallow repository failures instead of propagating`() = runTest {
         val throwingSessionMemories = object : SessionMemoryRepository {
             override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
             override suspend fun save(memory: SessionMemory) {}
@@ -113,8 +113,40 @@ class MemoryServiceTest {
         // Must not throw.
         service.setPendingConsent("session-1", "assignment-1")
         service.clearPendingConsent("session-1")
+    }
+
+    @Test
+    fun `incrementConsentAttempts fails toward attempts-exhausted, not toward retrying forever, when the read itself fails`() = runTest {
+        val throwingSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
+            override suspend fun save(memory: SessionMemory) {}
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), throwingSessionMemories, monitorIntervalMessages = 2)
+
         val attempts = service.incrementConsentAttempts("session-1")
 
-        assertEquals(0, attempts)
+        // Must be a value that fails `attempts < consentMaxAttempts` for any configured max, so a
+        // caller resolves to "attempts exhausted" (which still hands over the fallback phone)
+        // instead of looping the same consent question forever.
+        assertEquals(Int.MAX_VALUE, attempts)
+    }
+
+    @Test
+    fun `incrementConsentAttempts fails toward attempts-exhausted when reads succeed but the write fails`() = runTest {
+        // The real-world failure mode this guards against: a Mongo primary stepdown, write-concern
+        // failure, or disk-full condition where reads keep working but writes silently fail. In
+        // that scenario getState correctly keeps reporting pendingConsentRequest=true, so this is
+        // the only signal available to stop an infinite re-ask loop.
+        val readableButUnwritableSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = SessionMemory(sessionId, pendingConsentRequest = true, consentAttempts = 1)
+            override suspend fun save(memory: SessionMemory) {
+                throw RuntimeException("write concern failure")
+            }
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), readableButUnwritableSessionMemories, monitorIntervalMessages = 2)
+
+        val attempts = service.incrementConsentAttempts("session-1")
+
+        assertEquals(Int.MAX_VALUE, attempts)
     }
 }
