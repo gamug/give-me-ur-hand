@@ -286,6 +286,84 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `AMARILLO triage with wantsToBeHeard false routes to SupportStep's active-tone prompt`() = runTest {
+        val chunk = Chunk(id = "1", text = "Breathing exercises help.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
+        val repo = FakeChunkRepository(
+            mapOf(
+                "como manejo la ansiedad" to listOf(chunk),
+                "reform 1" to listOf(chunk),
+                "reform 2" to listOf(chunk),
+                "reform 3" to listOf(chunk)
+            )
+        )
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "como manejo la ansiedad", // standardize
+            """{"color":"AMARILLO","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""", // classify
+            expandJson,                 // expand
+            "Prueba respirar profundo." // support
+        ))
+        val agent = agent(fake, chunkRepository = repo)
+
+        val result = agent.handle("session-1", "komo manejo la anciedad")
+
+        assertEquals("answer", result.kind)
+        assertEquals("Prueba respirar profundo.", result.reply)
+        assertTrue(fake.lastSystemPrompt!!.contains("estrategias de prueba"))
+    }
+
+    @Test
+    fun `AMARILLO triage with wantsToBeHeard true still routes to AnswerStep`() = runTest {
+        val chunk = Chunk(id = "1", text = "Breathing exercises help.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
+        val repo = FakeChunkRepository(
+            mapOf(
+                "como manejo la ansiedad" to listOf(chunk),
+                "reform 1" to listOf(chunk),
+                "reform 2" to listOf(chunk),
+                "reform 3" to listOf(chunk)
+            )
+        )
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "como manejo la ansiedad", // standardize
+            """{"color":"AMARILLO","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":true}""", // classify
+            expandJson,                 // expand
+            "Respira profundo."         // answer
+        ))
+        val agent = agent(fake, chunkRepository = repo)
+
+        val result = agent.handle("session-1", "komo manejo la anciedad")
+
+        assertEquals("answer", result.kind)
+        assertEquals("Respira profundo.", result.reply)
+        assertEquals(false, fake.lastSystemPrompt!!.contains("estrategias de prueba"))
+    }
+
+    @Test
+    fun `VERDE triage always routes to AnswerStep regardless of wantsToBeHeard`() = runTest {
+        val chunk = Chunk(id = "1", text = "Breathing exercises help.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
+        val repo = FakeChunkRepository(
+            mapOf(
+                "como manejo la ansiedad" to listOf(chunk),
+                "reform 1" to listOf(chunk),
+                "reform 2" to listOf(chunk),
+                "reform 3" to listOf(chunk)
+            )
+        )
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "como manejo la ansiedad", // standardize
+            """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""", // classify
+            expandJson,                 // expand
+            "Respira profundo."         // answer
+        ))
+        val agent = agent(fake, chunkRepository = repo)
+
+        val result = agent.handle("session-1", "komo manejo la anciedad")
+
+        assertEquals("answer", result.kind)
+        assertEquals("Respira profundo.", result.reply)
+        assertEquals(false, fake.lastSystemPrompt!!.contains("estrategias de prueba"))
+    }
+
+    @Test
     fun `an incoherent message returns a redirect reply and increments the attempts counter`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf(
             "palabras sueltas raras", // standardize

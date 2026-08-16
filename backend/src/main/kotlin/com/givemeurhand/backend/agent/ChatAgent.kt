@@ -75,8 +75,12 @@ class ChatAgent(
             )
         }
 
-        val answer = AnswerStep.run(clean, chunks, deepSeekClient)
-        return AgentResult(answer, "answer")
+        val reply = if (triage.color == TriageColor.AMARILLO && !triage.wantsToBeHeard) {
+            SupportStep.run(clean, chunks, alarmCriteria.controlStrategiesText, deepSeekClient)
+        } else {
+            AnswerStep.run(clean, chunks, deepSeekClient)
+        }
+        return AgentResult(reply, "answer")
     }
 
     private suspend fun handlePendingConsent(
