@@ -92,7 +92,8 @@ fun main() {
         memoryService,
         alarmCriteria,
         config.fallbackHelpPhone,
-        config.consentMaxAttempts
+        config.consentMaxAttempts,
+        config.incoherenceMaxAttempts
     )
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 

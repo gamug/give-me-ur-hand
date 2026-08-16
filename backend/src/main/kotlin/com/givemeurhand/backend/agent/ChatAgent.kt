@@ -30,7 +30,8 @@ class ChatAgent(
     private val memoryService: MemoryService,
     private val alarmCriteria: AlarmCriteria,
     private val fallbackHelpPhone: String,
-    private val consentMaxAttempts: Int
+    private val consentMaxAttempts: Int,
+    private val incoherenceMaxAttempts: Int
 ) {
     suspend fun handle(sessionId: String, rawMessage: String): AgentResult {
         val result = handleInner(sessionId, rawMessage)
@@ -55,12 +56,21 @@ class ChatAgent(
             return AgentResult(GREETING_MESSAGE, "greeting")
         }
 
+        if (!triage.coherent) {
+            val attempts = memoryService.incrementRedirectAttempts(sessionId)
+            if (attempts <= incoherenceMaxAttempts) {
+                return AgentResult(RedirectStep.run(clean, deepSeekClient), "redirect")
+            }
+            return startConsentFlow(sessionId, clean, triggerSource = "immediate_triage")
+        }
+        memoryService.resetRedirectAttempts(sessionId)
+
         val reformulations = ExpandStep.run(clean, deepSeekClient)
         val chunks = RagSearchStep.search((listOf(clean) + reformulations).distinct(), chunkRepository)
 
         if (chunks.isEmpty()) {
             return AgentResult(
-                "Tu pregunta no está relacionada con el propósito de esta aplicación.",
+                "No tengo información suficiente para responder eso con seguridad, pero cuéntame más sobre cómo te sientes y trato de ayudarte.",
                 "out_of_scope"
             )
         }

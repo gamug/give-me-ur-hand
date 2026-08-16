@@ -10,7 +10,8 @@ data class AppConfig(
     val fallbackHelpPhone: String,
     val assignmentMaxAgeHours: Long,
     val monitorIntervalMessages: Int,
-    val consentMaxAttempts: Int
+    val consentMaxAttempts: Int,
+    val incoherenceMaxAttempts: Int
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -27,7 +28,8 @@ data class AppConfig(
                 fallbackHelpPhone = env["FALLBACK_HELP_PHONE"] ?: "+57 3219699131",
                 assignmentMaxAgeHours = (env["ASSIGNMENT_MAX_AGE_HOURS"] ?: "4").toLong(),
                 monitorIntervalMessages = (env["MONITOR_INTERVAL_MESSAGES"] ?: "6").toInt(),
-                consentMaxAttempts = (env["CONSENT_MAX_ATTEMPTS"] ?: "2").toInt()
+                consentMaxAttempts = (env["CONSENT_MAX_ATTEMPTS"] ?: "2").toInt(),
+                incoherenceMaxAttempts = (env["INCOHERENCE_MAX_ATTEMPTS"] ?: "3").toInt()
             )
         }
     }

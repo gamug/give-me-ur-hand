@@ -21,6 +21,7 @@ class AppConfigTest {
         assertEquals(4L, config.assignmentMaxAgeHours)
         assertEquals(6, config.monitorIntervalMessages)
         assertEquals(2, config.consentMaxAttempts)
+        assertEquals(3, config.incoherenceMaxAttempts)
     }
 
     @Test
@@ -46,5 +47,11 @@ class AppConfigTest {
     fun `reads CONSENT_MAX_ATTEMPTS override when present`() {
         val config = AppConfig.fromEnv(requiredOnly + mapOf("CONSENT_MAX_ATTEMPTS" to "3"))
         assertEquals(3, config.consentMaxAttempts)
+    }
+
+    @Test
+    fun `reads INCOHERENCE_MAX_ATTEMPTS override when present`() {
+        val config = AppConfig.fromEnv(requiredOnly + mapOf("INCOHERENCE_MAX_ATTEMPTS" to "5"))
+        assertEquals(5, config.incoherenceMaxAttempts)
     }
 }

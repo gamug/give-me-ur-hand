@@ -149,4 +149,68 @@ class MemoryServiceTest {
 
         assertEquals(Int.MAX_VALUE, attempts)
     }
+
+    @Test
+    fun `incrementRedirectAttempts increments and returns the new count`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2)
+
+        assertEquals(1, service.incrementRedirectAttempts("session-1"))
+        assertEquals(2, service.incrementRedirectAttempts("session-1"))
+    }
+
+    @Test
+    fun `resetRedirectAttempts sets the count back to zero`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2)
+        service.incrementRedirectAttempts("session-1")
+        service.incrementRedirectAttempts("session-1")
+
+        service.resetRedirectAttempts("session-1")
+
+        assertEquals(0, service.getState("session-1").redirectAttempts)
+    }
+
+    @Test
+    fun `incrementRedirectAttempts fails toward attempts-exhausted, not toward redirecting forever, when the read itself fails`() = runTest {
+        val throwingSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
+            override suspend fun save(memory: SessionMemory) {}
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), throwingSessionMemories, monitorIntervalMessages = 2)
+
+        val attempts = service.incrementRedirectAttempts("session-1")
+
+        // Must be a value that fails `attempts <= incoherenceMaxAttempts` for any configured max,
+        // so a caller escalates to the consent flow (which always ends in a professional or the
+        // fallback phone) instead of looping redirect questions forever.
+        assertEquals(Int.MAX_VALUE, attempts)
+    }
+
+    @Test
+    fun `incrementRedirectAttempts fails toward attempts-exhausted when reads succeed but the write fails`() = runTest {
+        val readableButUnwritableSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = SessionMemory(sessionId, redirectAttempts = 1)
+            override suspend fun save(memory: SessionMemory) {
+                throw RuntimeException("write concern failure")
+            }
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), readableButUnwritableSessionMemories, monitorIntervalMessages = 2)
+
+        val attempts = service.incrementRedirectAttempts("session-1")
+
+        assertEquals(Int.MAX_VALUE, attempts)
+    }
+
+    @Test
+    fun `resetRedirectAttempts swallows repository failures instead of propagating`() = runTest {
+        val throwingSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
+            override suspend fun save(memory: SessionMemory) {}
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), throwingSessionMemories, monitorIntervalMessages = 2)
+
+        // Must not throw.
+        service.resetRedirectAttempts("session-1")
+    }
 }

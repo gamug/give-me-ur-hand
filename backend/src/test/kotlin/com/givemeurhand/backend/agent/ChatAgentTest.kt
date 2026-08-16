@@ -27,8 +27,9 @@ class ChatAgentTest {
         assignmentService: com.givemeurhand.backend.assignment.AssignmentService = FallbackOnlyAssignmentService(fallbackPhone),
         memoryService: FakeMemoryService = FakeMemoryService(),
         consentMaxAttempts: Int = 2,
-        chunkRepository: FakeChunkRepository = FakeChunkRepository(emptyMap())
-    ) = ChatAgent(fake, chunkRepository, assignmentService, memoryService, alarmCriteria, fallbackPhone, consentMaxAttempts)
+        chunkRepository: FakeChunkRepository = FakeChunkRepository(emptyMap()),
+        incoherenceMaxAttempts: Int = 2
+    ) = ChatAgent(fake, chunkRepository, assignmentService, memoryService, alarmCriteria, fallbackPhone, consentMaxAttempts, incoherenceMaxAttempts)
 
     @Test
     fun `explicit human help request starts the consent flow instead of a one-way phone hand-off`() = runTest {
@@ -267,7 +268,7 @@ class ChatAgentTest {
     }
 
     @Test
-    fun `normal question with no matching chunks returns the out-of-scope message`() = runTest {
+    fun `normal question with no matching chunks returns the softened out-of-scope message`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf(
             "cual es la capital de francia",
             """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""",
@@ -278,6 +279,81 @@ class ChatAgentTest {
         val result = agent.handle("session-1", "cual es la kapital de francia")
 
         assertEquals("out_of_scope", result.kind)
-        assertEquals("Tu pregunta no está relacionada con el propósito de esta aplicación.", result.reply)
+        assertEquals(
+            "No tengo información suficiente para responder eso con seguridad, pero cuéntame más sobre cómo te sientes y trato de ayudarte.",
+            result.reply
+        )
+    }
+
+    @Test
+    fun `an incoherent message returns a redirect reply and increments the attempts counter`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "palabras sueltas raras", // standardize
+            """{"color":"VERDE","intent":"NORMAL","coherente":false,"quiere_ser_escuchado":false}""", // classify
+            "¿Puedes contarme más sobre cómo te sientes ahora mismo?" // redirect
+        ))
+        val memoryService = FakeMemoryService()
+        val agent = agent(fake, memoryService = memoryService, incoherenceMaxAttempts = 2)
+
+        val result = agent.handle("session-1", "asdkjh qweoiu asdlkj zxcv")
+
+        assertEquals("redirect", result.kind)
+        assertEquals("¿Puedes contarme más sobre cómo te sientes ahora mismo?", result.reply)
+        assertEquals(1, memoryService.getState("session-1").redirectAttempts)
+    }
+
+    @Test
+    fun `incoherenceMaxAttempts + 1 consecutive incoherent messages escalate to the consent flow instead of another redirect`() = runTest {
+        val incoherentClassify = """{"color":"VERDE","intent":"NORMAL","coherente":false,"quiere_ser_escuchado":false}"""
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "raw 1", incoherentClassify, "redirect reply 1",
+            "raw 2", incoherentClassify, "redirect reply 2",
+            "raw 3", incoherentClassify
+        ))
+        val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
+        val memoryService = FakeMemoryService()
+        val agent = agent(fake, assignmentService, memoryService, incoherenceMaxAttempts = 2)
+
+        val first = agent.handle("session-1", "mensaje raro 1")
+        assertEquals("redirect", first.kind)
+        assertEquals(1, memoryService.getState("session-1").redirectAttempts)
+
+        val second = agent.handle("session-1", "mensaje raro 2")
+        assertEquals("redirect", second.kind)
+        assertEquals(2, memoryService.getState("session-1").redirectAttempts)
+
+        val third = agent.handle("session-1", "mensaje raro 3")
+        assertEquals("human_help_pending_consent", third.kind)
+        assertTrue(memoryService.getState("session-1").pendingConsentRequest)
+        assertEquals(
+            listOf(FakeAssignmentService.AssignCall("session-1", "raw 3", "immediate_triage")),
+            assignmentService.assignHelperCalls
+        )
+    }
+
+    @Test
+    fun `a coherent message in between resets the redirect counter so a later incoherent message gets a fresh redirect`() = runTest {
+        val incoherentClassify = """{"color":"VERDE","intent":"NORMAL","coherente":false,"quiere_ser_escuchado":false}"""
+        val coherentClassify = """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}"""
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "raw 1", incoherentClassify, "redirect reply 1",
+            "raw 2", coherentClassify, expandJson,
+            "raw 3", incoherentClassify, "redirect reply 2"
+        ))
+        val memoryService = FakeMemoryService()
+        val agent = agent(fake, memoryService = memoryService, incoherenceMaxAttempts = 2)
+
+        val first = agent.handle("session-1", "mensaje raro 1")
+        assertEquals("redirect", first.kind)
+        assertEquals(1, memoryService.getState("session-1").redirectAttempts)
+
+        val second = agent.handle("session-1", "una pregunta normal")
+        assertEquals("out_of_scope", second.kind)
+        assertEquals(0, memoryService.getState("session-1").redirectAttempts)
+
+        val third = agent.handle("session-1", "mensaje raro 2")
+        assertEquals("redirect", third.kind)
+        assertEquals("redirect reply 2", third.reply)
+        assertEquals(1, memoryService.getState("session-1").redirectAttempts)
     }
 }

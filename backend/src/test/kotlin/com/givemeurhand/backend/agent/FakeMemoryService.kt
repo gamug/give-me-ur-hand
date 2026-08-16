@@ -32,4 +32,16 @@ class FakeMemoryService : MemoryService {
         states[sessionId] = updated
         return updated.consentAttempts
     }
+
+    override suspend fun incrementRedirectAttempts(sessionId: String): Int {
+        val current = states[sessionId] ?: SessionMemory(sessionId)
+        val updated = current.copy(redirectAttempts = current.redirectAttempts + 1)
+        states[sessionId] = updated
+        return updated.redirectAttempts
+    }
+
+    override suspend fun resetRedirectAttempts(sessionId: String) {
+        val current = states[sessionId] ?: SessionMemory(sessionId)
+        states[sessionId] = current.copy(redirectAttempts = 0)
+    }
 }

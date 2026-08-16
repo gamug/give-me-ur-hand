@@ -44,6 +44,7 @@ class ProfessionalIntegrationTest {
         FakeMemoryService(),
         alarmCriteria,
         "+57 3219699131",
+        2,
         2
     )
 

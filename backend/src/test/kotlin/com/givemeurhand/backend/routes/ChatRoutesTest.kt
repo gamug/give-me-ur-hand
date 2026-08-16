@@ -42,6 +42,7 @@ class ChatRoutesTest {
             FakeMemoryService(),
             alarmCriteria,
             "+57 3219699131",
+            2,
             2
         )
         application { module(agent) }
@@ -71,6 +72,7 @@ class ChatRoutesTest {
             FakeMemoryService(),
             alarmCriteria,
             "+57 3219699131",
+            2,
             2
         )
         application { module(agent) }

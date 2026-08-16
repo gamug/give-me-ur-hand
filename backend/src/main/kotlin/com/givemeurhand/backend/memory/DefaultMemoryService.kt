@@ -96,4 +96,38 @@ class DefaultMemoryService(
             Int.MAX_VALUE
         }
     }
+
+    override suspend fun incrementRedirectAttempts(sessionId: String): Int {
+        return try {
+            val current = sessionMemories.get(sessionId)
+            val updated = current.copy(redirectAttempts = current.redirectAttempts + 1)
+            sessionMemories.save(updated)
+            updated.redirectAttempts
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Fail toward "attempts exhausted", not "keep redirecting forever" — same direction as
+            // incrementConsentAttempts and for the same reason (see MemoryService KDoc). Unlike the
+            // consent path, there is no fallbackHelpPhone shown directly on the redirect path, but
+            // escalating routes into startConsentFlow, which always resolves to either a real
+            // professional or the fallback phone. Returning a low/zero value here instead would let
+            // `attempts <= incoherenceMaxAttempts` pass forever, trapping someone in an infinite
+            // loop of clarifying questions with no path to a human at all. Returning Int.MAX_VALUE
+            // guarantees that check fails regardless of the configured incoherenceMaxAttempts, so
+            // the caller escalates instead.
+            logger.error("incrementRedirectAttempts failed for session $sessionId, treating attempts as exhausted", e)
+            Int.MAX_VALUE
+        }
+    }
+
+    override suspend fun resetRedirectAttempts(sessionId: String) {
+        try {
+            val current = sessionMemories.get(sessionId)
+            sessionMemories.save(current.copy(redirectAttempts = 0))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.error("resetRedirectAttempts failed for session $sessionId, continuing without recording", e)
+        }
+    }
 }

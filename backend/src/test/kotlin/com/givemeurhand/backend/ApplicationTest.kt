@@ -30,6 +30,7 @@ class ApplicationTest {
             FakeMemoryService(),
             alarmCriteria,
             "+57 3219699131",
+            2,
             2
         )
         application { module(agent) }

@@ -31,4 +31,19 @@ interface MemoryService {
      * may be in genuine crisis.
      */
     suspend fun incrementConsentAttempts(sessionId: String): Int
+
+    /**
+     * Increments redirectAttempts and returns the new count. On internal failure, implementations
+     * MUST fail toward "attempts exhausted" (a value that reliably fails any `attempts <=
+     * incoherenceMaxAttempts` check), the same direction as [incrementConsentAttempts] and for the
+     * same reason: a caller stuck retrying forever because a write is silently failing would loop
+     * gentle redirect questions indefinitely with no way out. Unlike the redirect reply itself,
+     * escalating to the consent flow (via ChatAgent.startConsentFlow) always terminates in either
+     * a real professional or the fallback phone number, so failing toward escalation is the safe
+     * direction here too — failing toward "keep redirecting" has no such safety net.
+     */
+    suspend fun incrementRedirectAttempts(sessionId: String): Int
+
+    /** Resets redirectAttempts to 0. Called on any coherent message. */
+    suspend fun resetRedirectAttempts(sessionId: String)
 }
