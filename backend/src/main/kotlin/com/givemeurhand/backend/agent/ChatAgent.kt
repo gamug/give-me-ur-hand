@@ -55,7 +55,13 @@ class ChatAgent(
         val clean = StandardizeStep.run(rawMessage, deepSeekClient)
         val triage = AlarmClassifyStep.run(clean, alarmCriteria, deepSeekClient)
 
-        if (triage.intent == ChatIntent.HUMAN_HELP_EXPLICIT || triage.color == TriageColor.ROJO) {
+        // Only a ROJO triage grading ever offers to connect a professional — an explicit request
+        // to talk to someone (ChatIntent.HUMAN_HELP_EXPLICIT) is a strong signal but not itself
+        // sufficient: a coherent, non-critical person who just says "I need someone to talk to"
+        // must not be met with a request to share their data with a professional. That request
+        // still gets a caring, human-toned reply — it flows into the AMARILLO/VERDE branches below
+        // (wantsToBeHeard drives whether it's an active-support or a plain listening response).
+        if (triage.color == TriageColor.ROJO) {
             return startConsentFlow(sessionId, clean, triggerSource = "immediate_triage")
         }
 
