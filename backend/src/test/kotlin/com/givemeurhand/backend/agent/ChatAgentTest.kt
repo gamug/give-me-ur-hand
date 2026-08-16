@@ -43,10 +43,10 @@ class ChatAgentTest {
     )
 
     @Test
-    fun `explicit human help request starts the consent flow instead of a one-way phone hand-off`() = runTest {
+    fun `ROJO-graded explicit human help request starts the consent flow instead of a one-way phone hand-off`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf(
             "Quiero hablar con alguien",
-            """{"color":"VERDE","intent":"AYUDA_HUMANA","coherente":true,"quiere_ser_escuchado":false}"""
+            """{"color":"ROJO","intent":"AYUDA_HUMANA","coherente":true,"quiere_ser_escuchado":false}"""
         ))
         val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
         val memoryService = FakeMemoryService()
@@ -66,6 +66,37 @@ class ChatAgentTest {
         val state = memoryService.getState("session-1")
         assertTrue(state.pendingConsentRequest)
         assertEquals("assignment-1", state.pendingAssignmentId)
+    }
+
+    @Test
+    fun `a non-ROJO explicit human help request never offers to connect a professional`() = runTest {
+        // "I need someone to talk to" reads as an explicit ask for a human (AYUDA_HUMANA intent),
+        // but without a ROJO grading it must NOT trigger the consent+phone flow — only the triage
+        // color gates that, per the "never offer human help unless confirmed by the triage" rule.
+        val chunk = Chunk(id = "1", text = "Estamos aquí para acompañarte.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
+        val repo = FakeChunkRepository(
+            mapOf(
+                "Necesito hablar con alguien" to listOf(chunk),
+                "reform 1" to listOf(chunk),
+                "reform 2" to listOf(chunk),
+                "reform 3" to listOf(chunk)
+            )
+        )
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "Necesito hablar con alguien", // standardize
+            """{"color":"VERDE","intent":"AYUDA_HUMANA","coherente":true,"quiere_ser_escuchado":true}""", // classify
+            expandJson,
+            "Cuéntame más sobre cómo te sientes." // answer
+        ))
+        val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
+        val memoryService = FakeMemoryService()
+        val agent = agent(fake, assignmentService, memoryService, chunkRepository = repo)
+
+        val result = agent.handle("session-1", "necesito hablar con alguien")
+
+        assertEquals("answer", result.kind)
+        assertEquals(emptyList<FakeAssignmentService.AssignCall>(), assignmentService.assignHelperCalls)
+        assertEquals(false, memoryService.getState("session-1").pendingConsentRequest)
     }
 
     @Test
