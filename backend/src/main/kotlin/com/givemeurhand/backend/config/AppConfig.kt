@@ -8,7 +8,8 @@ data class AppConfig(
     val mongoDatabase: String,
     val jwtSecret: String,
     val fallbackHelpPhone: String,
-    val assignmentMaxAgeHours: Long
+    val assignmentMaxAgeHours: Long,
+    val monitorIntervalMessages: Int
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -23,7 +24,8 @@ data class AppConfig(
                 mongoDatabase = env["MONGODB_DATABASE"] ?: "give_me_ur_hand",
                 jwtSecret = required("JWT_SECRET"),
                 fallbackHelpPhone = env["FALLBACK_HELP_PHONE"] ?: "+57 3219699131",
-                assignmentMaxAgeHours = (env["ASSIGNMENT_MAX_AGE_HOURS"] ?: "4").toLong()
+                assignmentMaxAgeHours = (env["ASSIGNMENT_MAX_AGE_HOURS"] ?: "4").toLong(),
+                monitorIntervalMessages = (env["MONITOR_INTERVAL_MESSAGES"] ?: "6").toInt()
             )
         }
     }

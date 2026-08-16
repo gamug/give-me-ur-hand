@@ -3,6 +3,7 @@ package com.givemeurhand.backend.agent
 
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
+import com.givemeurhand.backend.memory.MemoryService
 import com.givemeurhand.backend.rag.ChunkRepository
 import com.givemeurhand.backend.rag.RagSearchStep
 
@@ -16,9 +17,16 @@ private const val GREETING_MESSAGE =
 class ChatAgent(
     private val deepSeekClient: DeepSeekClient,
     private val chunkRepository: ChunkRepository,
-    private val assignmentService: AssignmentService
+    private val assignmentService: AssignmentService,
+    private val memoryService: MemoryService
 ) {
     suspend fun handle(sessionId: String, rawMessage: String): AgentResult {
+        val result = handleInner(sessionId, rawMessage)
+        memoryService.recordTurn(sessionId, rawMessage, result.reply)
+        return result
+    }
+
+    private suspend fun handleInner(sessionId: String, rawMessage: String): AgentResult {
         val clean = StandardizeStep.run(rawMessage, deepSeekClient)
         val intent = ClassifyStep.run(clean, deepSeekClient)
 

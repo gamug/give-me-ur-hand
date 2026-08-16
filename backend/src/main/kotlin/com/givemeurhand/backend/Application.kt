@@ -4,6 +4,11 @@ import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
+import com.givemeurhand.backend.memory.CHAT_MESSAGES_COLLECTION
+import com.givemeurhand.backend.memory.MemoryService
+import com.givemeurhand.backend.memory.MongoChatMessageRepository
+import com.givemeurhand.backend.memory.MongoSessionMemoryRepository
+import com.givemeurhand.backend.memory.SESSION_MEMORY_COLLECTION
 import com.givemeurhand.backend.professional.ASSIGNMENTS_COLLECTION
 import com.givemeurhand.backend.professional.AssignmentRepository
 import com.givemeurhand.backend.professional.JwtService
@@ -65,12 +70,15 @@ fun main() {
     val professionalRepository = MongoProfessionalRepository(database.getCollection<Document>(PROFESSIONALS_COLLECTION))
     val assignmentRepository = MongoAssignmentRepository(database.getCollection<Document>(ASSIGNMENTS_COLLECTION))
     val jwtService = JwtService(config.jwtSecret)
+    val chatMessageRepository = MongoChatMessageRepository(database.getCollection<Document>(CHAT_MESSAGES_COLLECTION))
+    val sessionMemoryRepository = MongoSessionMemoryRepository(database.getCollection<Document>(SESSION_MEMORY_COLLECTION))
 
     val assignmentService: AssignmentService = LoadBalancedAssignmentService(
         professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
     )
+    val memoryService = MemoryService(chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages)
 
-    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService)
+    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService, memoryService)
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(

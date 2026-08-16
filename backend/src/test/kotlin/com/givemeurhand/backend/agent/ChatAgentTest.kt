@@ -14,7 +14,7 @@ class ChatAgentTest {
     @Test
     fun `explicit human help request returns the fallback phone`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf("Quiero hablar con alguien", "AYUDA_HUMANA"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
 
         val result = agent.handle("session-1", "kiero ablar con alguien")
 
@@ -25,7 +25,7 @@ class ChatAgentTest {
     @Test
     fun `crisis risk also escalates to human help`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf("ya no quiero vivir", "RIESGO_CRISIS"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
 
         val result = agent.handle("session-1", "ya no kiero vivir")
 
@@ -35,7 +35,7 @@ class ChatAgentTest {
     @Test
     fun `greeting returns a cordial reply without querying the knowledge base`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf("Hola", "SALUDO_CORTESIA"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
 
         val result = agent.handle("session-1", "hola")
 
@@ -64,12 +64,37 @@ class ChatAgentTest {
             expandJson,                 // expand
             "Respira profundo."         // answer
         ))
-        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
 
         val result = agent.handle("session-1", "komo manejo la anciedad")
 
         assertEquals("answer", result.kind)
         assertEquals("Respira profundo.", result.reply)
+    }
+
+    @Test
+    fun `recordTurn is invoked with the session id, raw message and final reply`() = runTest {
+        val chunk = Chunk(id = "1", text = "Breathing exercises help.", sourceDocument = "pfa.pdf", page = 1, chunkIndex = 0, score = 0.9)
+        val repo = FakeChunkRepository(
+            mapOf(
+                "como manejo la ansiedad" to listOf(chunk),
+                "reform 1" to listOf(chunk),
+                "reform 2" to listOf(chunk),
+                "reform 3" to listOf(chunk)
+            )
+        )
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "como manejo la ansiedad", // standardize
+            "PREGUNTA_NORMAL",          // classify
+            expandJson,                 // expand
+            "Respira profundo."         // answer
+        ))
+        val memoryService = FakeMemoryService()
+        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), memoryService)
+
+        val result = agent.handle("session-1", "komo manejo la anciedad")
+
+        assertEquals(listOf(Triple("session-1", "komo manejo la anciedad", result.reply)), memoryService.recordedCalls)
     }
 
     @Test
@@ -79,7 +104,7 @@ class ChatAgentTest {
             "PREGUNTA_NORMAL",
             expandJson
         ))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
 
         val result = agent.handle("session-1", "cual es la kapital de francia")
 

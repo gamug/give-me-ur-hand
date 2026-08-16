@@ -3,6 +3,7 @@ package com.givemeurhand.backend.routes
 
 import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.agent.FakeDeepSeekClient
+import com.givemeurhand.backend.agent.FakeMemoryService
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.module
@@ -23,7 +24,7 @@ class ChatRoutesTest {
         val fake = FakeDeepSeekClient(mutableListOf(
             "cual es la capital de francia", "PREGUNTA_NORMAL", """["r1","r2","r3"]"""
         ))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 
@@ -44,7 +45,7 @@ class ChatRoutesTest {
                 throw RuntimeException("boom")
             }
         }
-        val agent = ChatAgent(throwing, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"))
+        val agent = ChatAgent(throwing, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 

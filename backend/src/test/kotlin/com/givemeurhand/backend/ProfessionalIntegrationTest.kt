@@ -3,6 +3,7 @@ package com.givemeurhand.backend
 
 import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.agent.FakeDeepSeekClient
+import com.givemeurhand.backend.agent.FakeMemoryService
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.professional.FakeAssignmentRepository
 import com.givemeurhand.backend.professional.FakeProfessionalRepository
@@ -30,7 +31,8 @@ class ProfessionalIntegrationTest {
     private fun agent() = ChatAgent(
         FakeDeepSeekClient(),
         FakeChunkRepository(emptyMap()),
-        FallbackOnlyAssignmentService("+57 3219699131")
+        FallbackOnlyAssignmentService("+57 3219699131"),
+        FakeMemoryService()
     )
 
     private fun professionalDeps(
