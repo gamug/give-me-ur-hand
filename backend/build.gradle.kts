@@ -60,6 +60,14 @@ tasks.register<JavaExec>("seedProfessionals") {
     }
 }
 
+tasks.register<JavaExec>("extractAlarmCriteria") {
+    group = "application"
+    description = "Extrae criterios de alarma (PEIVD) desde knowledge_chunks vía DeepSeek y los guarda en alarm_criteria"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.givemeurhand.backend.alarm.ExtractAlarmCriteriaKt")
+    environment(System.getenv())
+}
+
 tasks.test {
     useJUnitPlatform()
 }
