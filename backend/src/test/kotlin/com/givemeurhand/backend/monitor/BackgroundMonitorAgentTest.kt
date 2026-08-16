@@ -10,6 +10,9 @@ import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.memory.MemoryService
 import com.givemeurhand.backend.memory.SessionMemory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import kotlin.test.Test
@@ -103,6 +106,33 @@ class BackgroundMonitorAgentTest {
 
         assertEquals(emptyList<FakeAssignmentService.AssignCall>(), assignmentService.assignHelperCalls)
         assertEquals("existing-assignment", memoryService.getState("session-1").pendingAssignmentId)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `two concurrent evaluate calls for the same session - the second is a no-op, not a duplicate assignment`() = runTest {
+        val memoryService = FakeMemoryService()
+        val assignmentService = FakeAssignmentService(assignmentId = "assignment-1")
+        // Simulates the real round-trip latency (DeepSeek call plus Mongo I/O) that lets a second
+        // evaluate() call for the same session race in while the first is still running.
+        val slowDeepSeek = object : DeepSeekClient {
+            override suspend fun complete(systemPrompt: String, userPrompt: String, temperature: Double): String {
+                delay(1000)
+                return rojoClassification
+            }
+        }
+        val monitor = BackgroundMonitorAgent(memoryService, alarmCriteria, slowDeepSeek, assignmentService)
+
+        // Both launched before either completes: the first evaluate() registers itself as
+        // in-progress, then suspends inside the (slow) DeepSeek classification call. Cooperative
+        // scheduling then runs the second evaluate(), which must find the session already in
+        // flight and skip — never call assignHelper a second time for the same alarm.
+        launch { monitor.evaluate("session-1") }
+        launch { monitor.evaluate("session-1") }
+        advanceUntilIdle()
+
+        assertEquals(1, assignmentService.assignHelperCalls.size)
+        assertEquals("assignment-1", memoryService.getState("session-1").pendingAssignmentId)
     }
 
     @Test

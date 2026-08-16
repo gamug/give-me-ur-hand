@@ -39,6 +39,27 @@ class MemoryServiceTest {
     }
 
     @Test
+    fun `recordTurn returns true only once, on the turn that crosses the threshold, not on every turn while at or above it`() = runTest {
+        // Regression for a double-fire bug: without a successful compactIfDue resetting the
+        // counter in between, messagesSinceCompaction stays at/above the threshold on every
+        // subsequent turn. recordTurn must only report "threshold crossed" on the one turn that
+        // reaches it exactly — otherwise ChatAgent would launch a new overlapping background
+        // monitor job on every turn thereafter, risking duplicate crisis assignments.
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2, deepSeekClient = FakeDeepSeekClient(), maxSummaryChars = defaultMaxSummaryChars)
+
+        val turn1 = service.recordTurn("session-1", "uno", "resp uno")
+        val turn2 = service.recordTurn("session-1", "dos", "resp dos")
+        val turn3 = service.recordTurn("session-1", "tres", "resp tres")
+        val turn4 = service.recordTurn("session-1", "cuatro", "resp cuatro")
+
+        assertFalse(turn1)
+        assertTrue(turn2)
+        assertFalse(turn3)
+        assertFalse(turn4)
+    }
+
+    @Test
     fun `recordTurn swallows repository failures and returns false instead of propagating`() = runTest {
         val throwingChatMessages = object : ChatMessageRepository {
             override suspend fun append(sessionId: String, role: String, text: String) {
@@ -255,5 +276,34 @@ class MemoryServiceTest {
         assertEquals("x".repeat(10), result.summary)
         assertEquals(0, result.messagesSinceCompaction)
         assertEquals(result, sessionMemories.get("session-1"))
+    }
+
+    @Test
+    fun `compactIfDue folds in every turn since the last compaction, not just monitorIntervalMessages worth of messages`() = runTest {
+        // Regression: recordTurn appends 2 messages (user + assistant) per turn, but
+        // messagesSinceCompaction counts turns. compactIfDue must fetch
+        // messagesSinceCompaction * 2 messages, not monitorIntervalMessages messages — the latter
+        // silently drops the earliest turns of every window from the summary (e.g. with
+        // monitorIntervalMessages = 2 turns = 4 messages, fetching only 2 messages would drop the
+        // entire first turn).
+        val chatMessages = FakeChatMessageRepository()
+        val sessionMemories = FakeSessionMemoryRepository()
+        val fakeDeepSeek = FakeDeepSeekClient(mutableListOf("resumen actualizado"))
+        val service = DefaultMemoryService(
+            chatMessages, sessionMemories, monitorIntervalMessages = 2,
+            deepSeekClient = fakeDeepSeek, maxSummaryChars = defaultMaxSummaryChars
+        )
+
+        service.recordTurn("session-1", "primer turno del usuario", "primera respuesta")
+        service.recordTurn("session-1", "segundo turno del usuario", "segunda respuesta")
+
+        service.compactIfDue("session-1")
+
+        val prompt = fakeDeepSeek.lastUserPrompt!!
+        assertTrue(
+            prompt.contains("primer turno del usuario"),
+            "should include the earliest turn since the last compaction, not just the most recent monitorIntervalMessages worth of messages"
+        )
+        assertTrue(prompt.contains("segundo turno del usuario"))
     }
 }

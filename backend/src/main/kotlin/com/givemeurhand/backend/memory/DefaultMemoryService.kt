@@ -28,7 +28,14 @@ class DefaultMemoryService(
             val updated = memory.copy(messagesSinceCompaction = memory.messagesSinceCompaction + 1)
             sessionMemories.save(updated)
 
-            updated.messagesSinceCompaction >= monitorIntervalMessages
+            // Exact-crossing check, not "at or above": once messagesSinceCompaction reaches the
+            // threshold it stays there (or above) until a successful compactIfDue resets it to 0.
+            // Using >= here would launch a new background monitor job on every subsequent turn
+            // while at/above threshold, not just the one turn that crosses it — those jobs overlap
+            // in real time (each does a DeepSeek round-trip plus Mongo I/O) and can double-fire a
+            // crisis assignment for the same session. See BackgroundMonitorAgent's own in-flight
+            // guard for the defense-in-depth half of this fix.
+            updated.messagesSinceCompaction == monitorIntervalMessages
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -146,7 +153,14 @@ class DefaultMemoryService(
                 return current
             }
 
-            val recentTurns = chatMessages.lastN(sessionId, monitorIntervalMessages)
+            // Fetch enough messages to cover every turn since the last compaction, not the static
+            // config default: recordTurn appends 2 messages (user + assistant) per turn but
+            // messagesSinceCompaction counts turns, so lastN needs messagesSinceCompaction * 2
+            // messages. Reading the current (not configured) count also keeps this correct if the
+            // counter has drifted above monitorIntervalMessages (e.g. after a prior compaction
+            // failure left it unreset) — using the static config here would silently drop the
+            // earliest turns of every window from the summary.
+            val recentTurns = chatMessages.lastN(sessionId, current.messagesSinceCompaction * 2)
             val updatedSummary = CompactionStep.run(current.summary, recentTurns, deepSeekClient).take(maxSummaryChars)
             val updated = current.copy(summary = updatedSummary, messagesSinceCompaction = 0)
             sessionMemories.save(updated)
