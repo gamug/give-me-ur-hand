@@ -1,20 +1,32 @@
 // backend/src/test/kotlin/com/givemeurhand/backend/agent/ChatAgentTest.kt
 package com.givemeurhand.backend.agent
 
+import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.rag.Chunk
 import com.givemeurhand.backend.rag.FakeChunkRepository
 import kotlinx.coroutines.test.runTest
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ChatAgentTest {
     private val expandJson = """["reform 1", "reform 2", "reform 3"]"""
 
+    private val alarmCriteria = AlarmCriteria(
+        version = 1,
+        generatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+        classificationPromptText = "criterios de prueba",
+        controlStrategiesText = "estrategias de prueba"
+    )
+
     @Test
     fun `explicit human help request returns the fallback phone`() = runTest {
-        val fake = FakeDeepSeekClient(mutableListOf("Quiero hablar con alguien", "AYUDA_HUMANA"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "Quiero hablar con alguien",
+            """{"color":"VERDE","intent":"AYUDA_HUMANA","coherente":true,"quiere_ser_escuchado":false}"""
+        ))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
 
         val result = agent.handle("session-1", "kiero ablar con alguien")
 
@@ -24,8 +36,11 @@ class ChatAgentTest {
 
     @Test
     fun `crisis risk also escalates to human help`() = runTest {
-        val fake = FakeDeepSeekClient(mutableListOf("ya no quiero vivir", "RIESGO_CRISIS"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "ya no quiero vivir",
+            """{"color":"ROJO","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}"""
+        ))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
 
         val result = agent.handle("session-1", "ya no kiero vivir")
 
@@ -34,8 +49,11 @@ class ChatAgentTest {
 
     @Test
     fun `greeting returns a cordial reply without querying the knowledge base`() = runTest {
-        val fake = FakeDeepSeekClient(mutableListOf("Hola", "SALUDO_CORTESIA"))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "Hola",
+            """{"color":"VERDE","intent":"SALUDO","coherente":true,"quiere_ser_escuchado":false}"""
+        ))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
 
         val result = agent.handle("session-1", "hola")
 
@@ -45,6 +63,19 @@ class ChatAgentTest {
         // Only standardize + classify should have run; expand/answer would consume a 3rd/4th
         // fake response and change lastSystemPrompt, so this proves RAG was never reached.
         assertEquals(true, fake.lastSystemPrompt?.contains("Clasifica") == true)
+    }
+
+    @Test
+    fun `greeting reply no longer proactively offers to talk to a real person`() = runTest {
+        val fake = FakeDeepSeekClient(mutableListOf(
+            "Hola",
+            """{"color":"VERDE","intent":"SALUDO","coherente":true,"quiere_ser_escuchado":false}"""
+        ))
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
+
+        val result = agent.handle("session-1", "hola")
+
+        assertEquals(false, result.reply.contains("hablar con una persona real"))
     }
 
     @Test
@@ -60,11 +91,11 @@ class ChatAgentTest {
         )
         val fake = FakeDeepSeekClient(mutableListOf(
             "como manejo la ansiedad", // standardize
-            "PREGUNTA_NORMAL",          // classify
+            """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""", // classify
             expandJson,                 // expand
             "Respira profundo."         // answer
         ))
-        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
+        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
 
         val result = agent.handle("session-1", "komo manejo la anciedad")
 
@@ -85,12 +116,12 @@ class ChatAgentTest {
         )
         val fake = FakeDeepSeekClient(mutableListOf(
             "como manejo la ansiedad", // standardize
-            "PREGUNTA_NORMAL",          // classify
+            """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""", // classify
             expandJson,                 // expand
             "Respira profundo."         // answer
         ))
         val memoryService = FakeMemoryService()
-        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), memoryService)
+        val agent = ChatAgent(fake, repo, FallbackOnlyAssignmentService("+57 3219699131"), memoryService, alarmCriteria)
 
         val result = agent.handle("session-1", "komo manejo la anciedad")
 
@@ -101,10 +132,10 @@ class ChatAgentTest {
     fun `normal question with no matching chunks returns the out-of-scope message`() = runTest {
         val fake = FakeDeepSeekClient(mutableListOf(
             "cual es la capital de francia",
-            "PREGUNTA_NORMAL",
+            """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""",
             expandJson
         ))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService())
+        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
 
         val result = agent.handle("session-1", "cual es la kapital de francia")
 

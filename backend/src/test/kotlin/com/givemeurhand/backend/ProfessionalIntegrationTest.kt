@@ -4,6 +4,7 @@ package com.givemeurhand.backend
 import com.givemeurhand.backend.agent.ChatAgent
 import com.givemeurhand.backend.agent.FakeDeepSeekClient
 import com.givemeurhand.backend.agent.FakeMemoryService
+import com.givemeurhand.backend.alarm.AlarmCriteria
 import com.givemeurhand.backend.assignment.FallbackOnlyAssignmentService
 import com.givemeurhand.backend.professional.FakeAssignmentRepository
 import com.givemeurhand.backend.professional.FakeProfessionalRepository
@@ -14,6 +15,7 @@ import com.givemeurhand.backend.rag.FakeChunkRepository
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -28,11 +30,19 @@ import kotlin.test.assertEquals
 class ProfessionalIntegrationTest {
     private val jwtService = JwtService("integration-test-secret")
 
+    private val alarmCriteria = AlarmCriteria(
+        version = 1,
+        generatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+        classificationPromptText = "criterios de prueba",
+        controlStrategiesText = "estrategias de prueba"
+    )
+
     private fun agent() = ChatAgent(
         FakeDeepSeekClient(),
         FakeChunkRepository(emptyMap()),
         FallbackOnlyAssignmentService("+57 3219699131"),
-        FakeMemoryService()
+        FakeMemoryService(),
+        alarmCriteria
     )
 
     private fun professionalDeps(

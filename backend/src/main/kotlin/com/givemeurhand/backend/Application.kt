@@ -1,6 +1,8 @@
 package com.givemeurhand.backend
 
 import com.givemeurhand.backend.agent.ChatAgent
+import com.givemeurhand.backend.alarm.ALARM_CRITERIA_COLLECTION
+import com.givemeurhand.backend.alarm.MongoAlarmCriteriaRepository
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
@@ -24,6 +26,7 @@ import com.givemeurhand.backend.routes.ChatResponse
 import com.givemeurhand.backend.routes.chatRoutes
 import com.givemeurhand.backend.routes.professionalRoutes
 import com.mongodb.kotlin.client.coroutine.MongoClient
+import kotlinx.coroutines.runBlocking
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.HttpTimeout
@@ -72,13 +75,17 @@ fun main() {
     val jwtService = JwtService(config.jwtSecret)
     val chatMessageRepository = MongoChatMessageRepository(database.getCollection<Document>(CHAT_MESSAGES_COLLECTION))
     val sessionMemoryRepository = MongoSessionMemoryRepository(database.getCollection<Document>(SESSION_MEMORY_COLLECTION))
+    val alarmCriteriaRepository = MongoAlarmCriteriaRepository(database.getCollection<Document>(ALARM_CRITERIA_COLLECTION))
 
     val assignmentService: AssignmentService = LoadBalancedAssignmentService(
         professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
     )
     val memoryService = DefaultMemoryService(chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages)
 
-    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService, memoryService)
+    val alarmCriteria = runBlocking { alarmCriteriaRepository.getCurrent() }
+        ?: error("No alarm_criteria document found — run ./gradlew extractAlarmCriteria first")
+
+    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService, memoryService, alarmCriteria)
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(

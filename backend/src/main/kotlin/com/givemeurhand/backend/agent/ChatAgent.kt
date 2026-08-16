@@ -1,6 +1,8 @@
 // backend/src/main/kotlin/com/givemeurhand/backend/agent/ChatAgent.kt
 package com.givemeurhand.backend.agent
 
+import com.givemeurhand.backend.alarm.AlarmCriteria
+import com.givemeurhand.backend.alarm.TriageColor
 import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.deepseek.DeepSeekClient
 import com.givemeurhand.backend.memory.MemoryService
@@ -11,14 +13,14 @@ data class AgentResult(val reply: String, val kind: String)
 
 private const val GREETING_MESSAGE =
     "¡Hola! Estoy aquí para acompañarte y ayudarte a manejar cómo te sientes después del terremoto. " +
-        "Puedes contarme qué te preocupa o preguntarme sobre cómo sobrellevar la situación, y si en algún " +
-        "momento prefieres hablar con una persona real, solo dímelo."
+        "Puedes contarme qué te preocupa o preguntarme sobre cómo sobrellevar la situación."
 
 class ChatAgent(
     private val deepSeekClient: DeepSeekClient,
     private val chunkRepository: ChunkRepository,
     private val assignmentService: AssignmentService,
-    private val memoryService: MemoryService
+    private val memoryService: MemoryService,
+    private val alarmCriteria: AlarmCriteria
 ) {
     suspend fun handle(sessionId: String, rawMessage: String): AgentResult {
         val result = handleInner(sessionId, rawMessage)
@@ -28,9 +30,9 @@ class ChatAgent(
 
     private suspend fun handleInner(sessionId: String, rawMessage: String): AgentResult {
         val clean = StandardizeStep.run(rawMessage, deepSeekClient)
-        val intent = ClassifyStep.run(clean, deepSeekClient)
+        val triage = AlarmClassifyStep.run(clean, alarmCriteria, deepSeekClient)
 
-        if (intent == Intent.HUMAN_HELP_EXPLICIT || intent == Intent.CRISIS_RISK) {
+        if (triage.intent == ChatIntent.HUMAN_HELP_EXPLICIT || triage.color == TriageColor.ROJO) {
             val phone = assignmentService.assignHelper(sessionId, clean)
             return AgentResult(humanHelpMessage(phone), "human_help")
         }
@@ -38,7 +40,7 @@ class ChatAgent(
         // Greetings and social pleasantries are in scope (being cordial is part of the
         // app's purpose) but won't semantically match any knowledge-base chunk, so they
         // must not go through the RAG relevance check below.
-        if (intent == Intent.GREETING) {
+        if (triage.intent == ChatIntent.GREETING) {
             return AgentResult(GREETING_MESSAGE, "greeting")
         }
 
