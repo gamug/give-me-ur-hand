@@ -5,7 +5,7 @@ import com.givemeurhand.backend.assignment.AssignmentService
 import com.givemeurhand.backend.config.AppConfig
 import com.givemeurhand.backend.deepseek.HttpDeepSeekClient
 import com.givemeurhand.backend.memory.CHAT_MESSAGES_COLLECTION
-import com.givemeurhand.backend.memory.MemoryService
+import com.givemeurhand.backend.memory.DefaultMemoryService
 import com.givemeurhand.backend.memory.MongoChatMessageRepository
 import com.givemeurhand.backend.memory.MongoSessionMemoryRepository
 import com.givemeurhand.backend.memory.SESSION_MEMORY_COLLECTION
@@ -76,7 +76,7 @@ fun main() {
     val assignmentService: AssignmentService = LoadBalancedAssignmentService(
         professionalRepository, assignmentRepository, config.fallbackHelpPhone, config.assignmentMaxAgeHours
     )
-    val memoryService = MemoryService(chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages)
+    val memoryService = DefaultMemoryService(chatMessageRepository, sessionMemoryRepository, config.monitorIntervalMessages)
 
     val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService, memoryService)
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)

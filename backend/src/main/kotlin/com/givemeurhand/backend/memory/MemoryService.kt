@@ -1,21 +1,16 @@
 // backend/src/main/kotlin/com/givemeurhand/backend/memory/MemoryService.kt
 package com.givemeurhand.backend.memory
 
-// Open (and recordTurn is open) so tests can substitute a FakeMemoryService that records
-// calls without exercising the real repository coordination logic below.
-open class MemoryService(
-    private val chatMessages: ChatMessageRepository,
-    private val sessionMemories: SessionMemoryRepository,
-    private val monitorIntervalMessages: Int
-) {
-    open suspend fun recordTurn(sessionId: String, userText: String, replyText: String): Boolean {
-        chatMessages.append(sessionId, "user", userText)
-        chatMessages.append(sessionId, "assistant", replyText)
-
-        val memory = sessionMemories.get(sessionId)
-        val updated = memory.copy(messagesSinceCompaction = memory.messagesSinceCompaction + 1)
-        sessionMemories.save(updated)
-
-        return updated.messagesSinceCompaction >= monitorIntervalMessages
-    }
+/**
+ * Records chat turns and tracks per-session turn counts.
+ *
+ * Contract: implementations MUST NOT throw. This is called from
+ * [com.givemeurhand.backend.agent.ChatAgent] after a response has already been produced, with no
+ * surrounding try/catch — a transient recording failure (e.g. Mongo being unreachable) MUST NOT
+ * turn an already-correct answer into an error. Any internal failure MUST be caught and logged
+ * internally instead of propagating (see [com.givemeurhand.backend.assignment.AssignmentService]
+ * for the same contract applied to a different collaborator).
+ */
+interface MemoryService {
+    suspend fun recordTurn(sessionId: String, userText: String, replyText: String): Boolean
 }
