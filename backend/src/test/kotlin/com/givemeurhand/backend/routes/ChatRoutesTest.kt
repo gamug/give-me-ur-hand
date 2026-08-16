@@ -35,7 +35,15 @@ class ChatRoutesTest {
             """{"color":"VERDE","intent":"NORMAL","coherente":true,"quiere_ser_escuchado":false}""",
             """["r1","r2","r3"]"""
         ))
-        val agent = ChatAgent(fake, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
+        val agent = ChatAgent(
+            fake,
+            FakeChunkRepository(emptyMap()),
+            FallbackOnlyAssignmentService("+57 3219699131"),
+            FakeMemoryService(),
+            alarmCriteria,
+            "+57 3219699131",
+            2
+        )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 
@@ -56,7 +64,15 @@ class ChatRoutesTest {
                 throw RuntimeException("boom")
             }
         }
-        val agent = ChatAgent(throwing, FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
+        val agent = ChatAgent(
+            throwing,
+            FakeChunkRepository(emptyMap()),
+            FallbackOnlyAssignmentService("+57 3219699131"),
+            FakeMemoryService(),
+            alarmCriteria,
+            "+57 3219699131",
+            2
+        )
         application { module(agent) }
         client.config { install(ContentNegotiation) { json() } }
 

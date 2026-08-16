@@ -23,7 +23,15 @@ class ApplicationTest {
 
     @Test
     fun `health check returns 200`() = testApplication {
-        val agent = ChatAgent(FakeDeepSeekClient(), FakeChunkRepository(emptyMap()), FallbackOnlyAssignmentService("+57 3219699131"), FakeMemoryService(), alarmCriteria)
+        val agent = ChatAgent(
+            FakeDeepSeekClient(),
+            FakeChunkRepository(emptyMap()),
+            FallbackOnlyAssignmentService("+57 3219699131"),
+            FakeMemoryService(),
+            alarmCriteria,
+            "+57 3219699131",
+            2
+        )
         application { module(agent) }
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)

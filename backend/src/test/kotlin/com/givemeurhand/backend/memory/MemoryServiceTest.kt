@@ -51,4 +51,70 @@ class MemoryServiceTest {
 
         assertFalse(result)
     }
+
+    @Test
+    fun `setPendingConsent then getState reflects pending consent with a reset attempt count`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2)
+
+        service.setPendingConsent("session-1", "assignment-1")
+        val state = service.getState("session-1")
+
+        assertTrue(state.pendingConsentRequest)
+        assertEquals("assignment-1", state.pendingAssignmentId)
+        assertEquals(0, state.consentAttempts)
+    }
+
+    @Test
+    fun `clearPendingConsent resets pending state and attempt count`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2)
+        service.setPendingConsent("session-1", "assignment-1")
+        service.incrementConsentAttempts("session-1")
+
+        service.clearPendingConsent("session-1")
+        val state = service.getState("session-1")
+
+        assertFalse(state.pendingConsentRequest)
+        assertEquals(null, state.pendingAssignmentId)
+        assertEquals(0, state.consentAttempts)
+    }
+
+    @Test
+    fun `incrementConsentAttempts increments and returns the new count`() = runTest {
+        val sessionMemories = FakeSessionMemoryRepository()
+        val service = DefaultMemoryService(FakeChatMessageRepository(), sessionMemories, monitorIntervalMessages = 2)
+
+        assertEquals(1, service.incrementConsentAttempts("session-1"))
+        assertEquals(2, service.incrementConsentAttempts("session-1"))
+    }
+
+    @Test
+    fun `getState swallows repository failures and returns default state instead of propagating`() = runTest {
+        val throwingSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
+            override suspend fun save(memory: SessionMemory) {}
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), throwingSessionMemories, monitorIntervalMessages = 2)
+
+        val state = service.getState("session-1")
+
+        assertEquals(SessionMemory("session-1"), state)
+    }
+
+    @Test
+    fun `setPendingConsent, clearPendingConsent and incrementConsentAttempts swallow repository failures`() = runTest {
+        val throwingSessionMemories = object : SessionMemoryRepository {
+            override suspend fun get(sessionId: String): SessionMemory = throw RuntimeException("mongo unreachable")
+            override suspend fun save(memory: SessionMemory) {}
+        }
+        val service = DefaultMemoryService(FakeChatMessageRepository(), throwingSessionMemories, monitorIntervalMessages = 2)
+
+        // Must not throw.
+        service.setPendingConsent("session-1", "assignment-1")
+        service.clearPendingConsent("session-1")
+        val attempts = service.incrementConsentAttempts("session-1")
+
+        assertEquals(0, attempts)
+    }
 }

@@ -35,7 +35,7 @@ class MongoAssignmentRepository(
             ?.getDate("assignedAt")
             ?.toInstant()
 
-    override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String): Assignment {
+    override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String, triggerSource: String): Assignment {
         val now = Date()
         val doc = Document()
             .append("professionalId", professionalId)
@@ -44,6 +44,11 @@ class MongoAssignmentRepository(
             .append("status", "active")
             .append("assignedAt", now)
             .append("closedAt", null)
+            .append("consentStatus", "PENDING")
+            .append("contactPhone", null)
+            .append("consentEvidenceText", null)
+            .append("consentTimestamp", null)
+            .append("triggerSource", triggerSource)
         collection.insertOne(doc)
         return Assignment(
             id = doc.getObjectId("_id").toHexString(),
@@ -52,7 +57,12 @@ class MongoAssignmentRepository(
             reasonSnippet = reasonSnippet,
             status = "active",
             assignedAt = now.toInstant(),
-            closedAt = null
+            closedAt = null,
+            consentStatus = "PENDING",
+            contactPhone = null,
+            consentEvidenceText = null,
+            consentTimestamp = null,
+            triggerSource = triggerSource
         )
     }
 
@@ -70,6 +80,23 @@ class MongoAssignmentRepository(
         return collection.updateOne(filter, update).modifiedCount > 0
     }
 
+    override suspend fun updateConsent(
+        assignmentId: String,
+        status: String,
+        contactPhone: String?,
+        evidenceText: String,
+        timestamp: Instant
+    ): Boolean {
+        val objectId = runCatching { ObjectId(assignmentId) }.getOrNull() ?: return false
+        val update = Updates.combine(
+            Updates.set("consentStatus", status),
+            Updates.set("contactPhone", contactPhone),
+            Updates.set("consentEvidenceText", evidenceText),
+            Updates.set("consentTimestamp", Date.from(timestamp))
+        )
+        return collection.updateOne(Filters.eq("_id", objectId), update).modifiedCount > 0
+    }
+
     private fun Document.toAssignment() = Assignment(
         id = getObjectId("_id").toHexString(),
         professionalId = getString("professionalId"),
@@ -77,6 +104,11 @@ class MongoAssignmentRepository(
         reasonSnippet = getString("reasonSnippet"),
         status = getString("status"),
         assignedAt = getDate("assignedAt").toInstant(),
-        closedAt = getDate("closedAt")?.toInstant()
+        closedAt = getDate("closedAt")?.toInstant(),
+        consentStatus = getString("consentStatus") ?: "PENDING",
+        contactPhone = getString("contactPhone"),
+        consentEvidenceText = getString("consentEvidenceText"),
+        consentTimestamp = getDate("consentTimestamp")?.toInstant(),
+        triggerSource = getString("triggerSource") ?: "immediate_triage"
     )
 }

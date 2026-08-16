@@ -86,13 +86,17 @@ class ProfessionalRoutesTest {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        assertTrue(response.bodyAsText().contains("\"status\":\"active\""))
+        val body = response.bodyAsText()
+        assertTrue(body.contains("\"status\":\"active\""))
+        assertTrue(body.contains("\"consentStatus\":\"PENDING\""))
+        assertTrue(body.contains("\"contactPhone\":null"))
+        assertTrue(body.contains("\"triggerSource\":\"immediate_triage\""))
     }
 
     @Test
     fun `closing a case owned by the professional returns 200`() = testApplication {
         val assignments = FakeAssignmentRepository()
-        val created = assignments.create("p1", "session-1", "necesito ayuda")
+        val created = assignments.create("p1", "session-1", "necesito ayuda", "immediate_triage")
         val profs = FakeProfessionalRepository(listOf(professional("ana", "clave123")))
         application {
             install(ContentNegotiation) { json() }
@@ -110,7 +114,7 @@ class ProfessionalRoutesTest {
     @Test
     fun `closing a case owned by another professional returns 404`() = testApplication {
         val assignments = FakeAssignmentRepository()
-        val created = assignments.create("someone-else", "session-1", "necesito ayuda")
+        val created = assignments.create("someone-else", "session-1", "necesito ayuda", "immediate_triage")
         val profs = FakeProfessionalRepository(listOf(professional("ana", "clave123")))
         application {
             install(ContentNegotiation) { json() }

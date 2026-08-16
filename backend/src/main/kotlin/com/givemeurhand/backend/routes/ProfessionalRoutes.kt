@@ -27,7 +27,10 @@ data class CaseResponse(
     val reasonSnippet: String,
     val status: String,
     val assignedAt: String,
-    val closedAt: String?
+    val closedAt: String?,
+    val consentStatus: String,
+    val contactPhone: String?,
+    val triggerSource: String
 )
 
 private fun Assignment.toResponse() = CaseResponse(
@@ -35,7 +38,10 @@ private fun Assignment.toResponse() = CaseResponse(
     reasonSnippet = reasonSnippet,
     status = status,
     assignedAt = assignedAt.toString(),
-    closedAt = closedAt?.toString()
+    closedAt = closedAt?.toString(),
+    consentStatus = consentStatus,
+    contactPhone = contactPhone,
+    triggerSource = triggerSource
 )
 
 private suspend fun PipelineContext<Unit, ApplicationCall>.requireProfessional(

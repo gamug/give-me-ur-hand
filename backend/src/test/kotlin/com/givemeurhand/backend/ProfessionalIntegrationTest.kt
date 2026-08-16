@@ -42,7 +42,9 @@ class ProfessionalIntegrationTest {
         FakeChunkRepository(emptyMap()),
         FallbackOnlyAssignmentService("+57 3219699131"),
         FakeMemoryService(),
-        alarmCriteria
+        alarmCriteria,
+        "+57 3219699131",
+        2
     )
 
     private fun professionalDeps(

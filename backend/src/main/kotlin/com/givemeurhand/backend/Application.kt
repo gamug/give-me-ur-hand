@@ -85,7 +85,15 @@ fun main() {
     val alarmCriteria = runBlocking { alarmCriteriaRepository.getCurrent() }
         ?: error("No alarm_criteria document found — run ./gradlew extractAlarmCriteria first")
 
-    val agent = ChatAgent(deepSeekClient, chunkRepository, assignmentService, memoryService, alarmCriteria)
+    val agent = ChatAgent(
+        deepSeekClient,
+        chunkRepository,
+        assignmentService,
+        memoryService,
+        alarmCriteria,
+        config.fallbackHelpPhone,
+        config.consentMaxAttempts
+    )
     val professionalDeps = ProfessionalRouteDeps(professionalRepository, assignmentRepository, jwtService)
 
     Runtime.getRuntime().addShutdownHook(

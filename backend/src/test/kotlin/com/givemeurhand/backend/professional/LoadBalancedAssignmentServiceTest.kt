@@ -5,6 +5,7 @@ import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class LoadBalancedAssignmentServiceTest {
     private val now = Instant.parse("2026-08-14T12:00:00Z")
@@ -20,11 +21,15 @@ class LoadBalancedAssignmentServiceTest {
         assignments.seed("p2", now.minus(Duration.ofMinutes(30)))
 
         val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 2", phone)
+        assertEquals("+57 2", result.phone)
+        assertNotNull(result.assignmentId)
         assertEquals(1, assignments.createdCalls.size)
-        assertEquals(Triple("p2", "session-1", "necesito ayuda"), assignments.createdCalls.first())
+        assertEquals(
+            FakeAssignmentRepository.CreateCall("p2", "session-1", "necesito ayuda", "immediate_triage"),
+            assignments.createdCalls.first()
+        )
     }
 
     @Test
@@ -39,9 +44,9 @@ class LoadBalancedAssignmentServiceTest {
         assignments.seed("p2", now.minus(Duration.ofMinutes(30)))
 
         val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 1", phone)
+        assertEquals("+57 1", result.phone)
     }
 
     @Test
@@ -51,9 +56,9 @@ class LoadBalancedAssignmentServiceTest {
         assignments.seed("p1", now.minus(Duration.ofHours(10)))
 
         val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 2", phone)
+        assertEquals("+57 2", result.phone)
     }
 
     @Test
@@ -67,9 +72,9 @@ class LoadBalancedAssignmentServiceTest {
         assignments.seed("p2", now.minus(Duration.ofHours(1)))
 
         val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 1", phone)
+        assertEquals("+57 1", result.phone)
     }
 
     @Test
@@ -78,9 +83,10 @@ class LoadBalancedAssignmentServiceTest {
         val assignments = FakeAssignmentRepository()
 
         val service = LoadBalancedAssignmentService(profs, assignments, "+57 fallback", maxAgeHours = 4) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 fallback", phone)
+        assertEquals("+57 fallback", result.phone)
+        assertEquals(null, result.assignmentId)
         assertEquals(0, assignments.createdCalls.size)
     }
 
@@ -99,9 +105,35 @@ class LoadBalancedAssignmentServiceTest {
             "+57 fallback",
             maxAgeHours = 4
         ) { now }
-        val phone = service.assignHelper("session-1", "necesito ayuda")
+        val result = service.assignHelper("session-1", "necesito ayuda", "immediate_triage")
 
-        assertEquals("+57 fallback", phone)
+        assertEquals("+57 fallback", result.phone)
+        assertEquals(null, result.assignmentId)
         assertEquals(0, assignments.createdCalls.size)
+    }
+
+    @Test
+    fun `recordConsent swallows a repository throw instead of propagating`() = runTest {
+        val throwingAssignmentRepository = object : AssignmentRepository {
+            override suspend fun countActiveSince(professionalId: String, since: Instant): Int = 0
+            override suspend fun lastAssignedAt(professionalId: String): Instant? = null
+            override suspend fun create(professionalId: String, sessionId: String, reasonSnippet: String, triggerSource: String): Assignment =
+                throw RuntimeException("should not be called")
+            override suspend fun findByProfessional(professionalId: String): List<Assignment> = emptyList()
+            override suspend fun close(assignmentId: String, professionalId: String): Boolean = false
+            override suspend fun updateConsent(
+                assignmentId: String,
+                status: String,
+                contactPhone: String?,
+                evidenceText: String,
+                timestamp: Instant
+            ): Boolean = throw RuntimeException("db unreachable")
+        }
+        val profs = FakeProfessionalRepository(emptyList())
+
+        val service = LoadBalancedAssignmentService(profs, throwingAssignmentRepository, "+57 fallback", maxAgeHours = 4) { now }
+
+        // Must not throw.
+        service.recordConsent("some-id", granted = true, phone = "3001234567", evidenceText = "si, mi numero es...")
     }
 }

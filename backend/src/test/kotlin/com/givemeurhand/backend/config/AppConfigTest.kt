@@ -20,6 +20,7 @@ class AppConfigTest {
         assertEquals("+57 3219699131", config.fallbackHelpPhone)
         assertEquals(4L, config.assignmentMaxAgeHours)
         assertEquals(6, config.monitorIntervalMessages)
+        assertEquals(2, config.consentMaxAttempts)
     }
 
     @Test
@@ -39,5 +40,11 @@ class AppConfigTest {
     fun `reads MONITOR_INTERVAL_MESSAGES override when present`() {
         val config = AppConfig.fromEnv(requiredOnly + mapOf("MONITOR_INTERVAL_MESSAGES" to "10"))
         assertEquals(10, config.monitorIntervalMessages)
+    }
+
+    @Test
+    fun `reads CONSENT_MAX_ATTEMPTS override when present`() {
+        val config = AppConfig.fromEnv(requiredOnly + mapOf("CONSENT_MAX_ATTEMPTS" to "3"))
+        assertEquals(3, config.consentMaxAttempts)
     }
 }
